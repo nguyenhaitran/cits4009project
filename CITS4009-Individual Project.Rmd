@@ -1,0 +1,22 @@
+---
+title: "CITS4009-Individual Project"
+author: "Henry Tran"
+date: "2024-09-24"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+# Install all the required packages
+
+```
+
+```{r}
+# Read the data
+
+```
+
+
