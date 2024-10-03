@@ -16,7 +16,21 @@ knitr::opts_chunk$set(echo = TRUE)
 
 ```{r}
 # Read the data
-
+path<-url("https://lms.uwa.edu.au/bbcswebdav/pid-3998436-dt-content-rid-47695412_1/courses/CITS4009_SEM-2_2024/Countries%20and%20death%20causes.csv")
 ```
+
+```{r}
+data<-read.csv(path, header=TRUE)
+head(data)
+```
+
+```{r}
+names(data)<-gsub("\\.", " ", names(data)) #remove the dot in the column names
+
+head(data)
+```
+
+
+
 
 
