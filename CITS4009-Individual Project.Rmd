@@ -31,7 +31,7 @@ The data has 31 columns and 6840 rows. For the column names, they can be seen th
 ```{r}
 names(data)<-gsub("\\.", " ", names(data)) #remove the dot in the column names
 
-head(data)
+data
 ```
 
 ```{r}
@@ -53,6 +53,7 @@ There are 228 unique entities but there are only 206 codes in this dataset. The 
 
 While with remaining 29 columns, the maximum numbers are extremely larger than other values. The reason is because the dataset did not only record deaths of countries, but it also recorded the total deaths in groups, regions and in the world. 
 
+For data exploratory, it will be done using Shiny app
 
 
 
