@@ -30,7 +30,7 @@ nrow(data)
 The data has 31 columns and 6840 rows. For the column names, they can be seen that the column names have dot-separated between each word.
 
 ```{r}
-names(data)<-gsub("\\.", " ", names(data)) #remove the dot in the column names
+names(data)<-gsub("\\.", "_", names(data)) #remove the dot in the column names
 
 data
 ```
@@ -59,70 +59,27 @@ For data exploratory, it will be done using Shiny app
 ```{r}
 # Define UI for application that draws different plot
 ui <- fluidPage(
-sidebarPanel(
-      selectInput("plot_type", "Select plot type:", choices = c("Pairwise", "Scatter", "Bin2d", "Hex", "Count")),
-      conditionalPanel(
-        condition = "input.plot_type == 'Pairwise'",
-        #panel for option selection for Pairwise plot
-        pickerInput(
-          inputId = "selected_attributes", #link to input$selected_attributes
-          label = "Select attributes:",
-          choices = names(a),
-          multiple = TRUE,
-          options = list(`actions-box` = TRUE)
-        )
-      ),
-      conditionalPanel(
-        condition = "input.plot_type == 'Scatter' || input.plot_type=='Bin2d'|| input.plot_type=='Hex' || input.plot_type=='Count'",
-        selectInput("x_attr", "Select x-axis attribute:", names(a)),
-        selectInput("y_attr", "Select y-axis attribute:", names(a))
-      )
-
-        sidebarLayout(
-            sidebarPanel(
-                selectInput(inputId = "x1", label = "Choose X:", choices = names(df))
-            ),
-            mainPanel(
-                plotOutput(outputId = "histogram")
-            )
-        )
-),
-mainPanel(
-      plotOutput("plot",height = "400px", width = "600px")
+    titlePanel("Histogram of death in country/region during 1990 - 2019"),
+    sidebarLayout(
+        sidebarPanel(
+            selectInput("region", "Choose country/region:", choices = unique(data$Entity)),
+            selectInput("reason", "Choose x for Histogram 1:", choices = names(data)[4:31])
+        ),
+        mainPanel(plotOutput("histogram"))
     )
 )
 
-# in the server:
-server <- function(input, output) {
-  output$plot <- renderPlot({
-      if (input$plot_type == "Pairwise") {
-        selected_attrs <- input$selected_attributes
-        if (length(selected_attrs) < 2) {
-          return(NULL)
-        } else{
-        pairs(a[, selected_attrs])
-        }
-      } else if (input$plot_type == "Scatter"){
-        x_attr<-input$x_attr
-        y_attr<-input$y_attr
-        ggplot(a, aes_string(x=x_attr, y=y_attr))+geom_point()+geom_smooth() 
-      } else if (input$plot_type == "Bin2d"){
-        x_attr<-input$x_attr
-        y_attr<-input$y_attr
-        ggplot(a, aes_string(x=x_attr, y=y_attr))+geom_bin2d()
-      } else if (input$plot_type == "Bin2d"){
-        x_attr<-input$x_attr
-        y_attr<-input$y_attr
-        ggplot(a, aes_string(x=x_attr, y=y_attr))+geom_hex(binwidth=c(min(x),max(x)))
-      } else if (input$plot_type == "Count"){
-        x_attr<-input$x_attr
-        y_attr<-input$y_attr
-        ggplot(a)+geom_count(aes_string(x=x_attr, y=y_attr), alpha = 0.25)
-      }
+
+# Define the server
+server <- function(input, output){
+    # Render the histograms
+    output$histogram <- renderPlot({
+      region_data<-data[data$Entity==input$region,]
+      ggplot(region_data, aes_string(x="Year", y=input$reason)) + geom_line(color="blue") + labs(x="Year", y = input$reason)    
     })
 }
 
-# Run the application 
+# Run the Shiny app
 shinyApp(ui = ui, server = server)
 ```
 
