@@ -49,8 +49,9 @@ data$Code<-as.factor(data$Code)
 summary(data)
 str(data)
 ```
+There are 228 unique entities but there are only 206 codes in this dataset. The reason is because there are some countries and regions do not have unique codes.
 
-
+While with remaining 29 columns, the maximum numbers are extremely larger than other values. The reason is because the dataset did not only record deaths of countries, but it also recorded the total deaths in groups, regions and in the world. 
 
 
 
