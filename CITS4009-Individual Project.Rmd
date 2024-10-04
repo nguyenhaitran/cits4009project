@@ -52,7 +52,15 @@ str(data)
 ```
 There are 228 unique entities but there are only 206 codes in this dataset. The reason is because there are some countries and regions do not have unique codes.
 
-While with remaining 29 columns, the maximum numbers are extremely larger than other values. The reason is because the dataset did not only record deaths of countries, but it also recorded the total deaths in groups, regions and in the world. 
+While with remaining 29 columns, the maximum numbers are extremely larger than other values. The reason is because the dataset did not only record deaths of countries, but it also recorded the total deaths in groups, regions and in the world. Therefore, if we do the data analysis on the whole dataset, it will create skewness problem. The solution for this would be we can seperated data into different groups: countries, regions and world. I have some examples of the single eda below:
+
+```{r}
+boxplot(data$High_systolic_blood_pressure)
+```
+```{r}
+boxplot(data$Outdoor_air_pollution)
+```
+
 
 For data exploratory, it will be done using Shiny app
 
@@ -62,10 +70,12 @@ ui <- fluidPage(
     titlePanel("Histogram of death in country/region during 1990 - 2019"),
     sidebarLayout(
         sidebarPanel(
-            selectInput("region", "Choose country/region:", choices = unique(data$Entity)),
-            selectInput("reason", "Choose x for Histogram 1:", choices = names(data)[4:31])
+            checkboxInput("compare", "Compare between 2 countries/regions", FALSE),
+            selectInput("region1", "Choose country/region:", choices = unique(data$Entity)),
+            selectInput("region2", "Choose country/region:", choices = unique(data$Entity)),
+            selectInput("reason", "Choose death reason:", choices = names(data)[4:31]),
         ),
-        mainPanel(plotOutput("histogram"))
+        mainPanel(plotOutput("plot1"), plotOutput("plot2"))
     )
 )
 
@@ -73,10 +83,24 @@ ui <- fluidPage(
 # Define the server
 server <- function(input, output){
     # Render the histograms
-    output$histogram <- renderPlot({
-      region_data<-data[data$Entity==input$region,]
-      ggplot(region_data, aes_string(x="Year", y=input$reason)) + geom_line(color="blue") + labs(x="Year", y = input$reason)    
+  if (input$compare){
+    output$plot1 <- renderPlot({
+      region_data<-data[data$Entity==input$region1,]
+      # Plot all death reasons
+      ggplot(region_data, aes_string(x="Year", y=input$reason)) + geom_line(color="blue") + labs(x="Year", y = input$reason)
     })
+  } else{
+    output$plot1 <- renderPlot({
+      region_data<-data[data$Entity==input$region1,]
+      # Plot all death reasons
+      ggplot(region_data, aes_string(x="Year", y=input$reason)) + geom_line(color="blue") + labs(x="Year", y = input$reason)
+    })
+    output$plot2 <- renderPlot({
+      region_data<-data[data$Entity==input$region2,]
+      # Plot all death reasons
+      ggplot(region_data, aes_string(x="Year", y=input$reason)) + geom_line(color="blue") + labs(x="Year", y = input$reason)
+    })
+  }
 }
 
 # Run the Shiny app
