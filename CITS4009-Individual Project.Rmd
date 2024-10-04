@@ -1,7 +1,7 @@
 ---
 title: "CITS4009-Individual Project"
 author: "Henry Tran"
-date: "2024-09-24"
+date: "2024-10-04"
 output: html_document
 ---
 
@@ -71,11 +71,16 @@ ui <- fluidPage(
     sidebarLayout(
         sidebarPanel(
             checkboxInput("compare", "Compare between 2 countries/regions", FALSE),
-            selectInput("region1", "Choose country/region:", choices = unique(data$Entity)),
-            selectInput("region2", "Choose country/region:", choices = unique(data$Entity)),
+            selectInput("region1", "Choose the first country/region:", choices = unique(data$Entity)),
+            selectInput("region2", "Choose the second country/region:", choices = unique(data$Entity)),
             selectInput("reason", "Choose death reason:", choices = names(data)[4:31]),
         ),
-        mainPanel(plotOutput("plot1"), plotOutput("plot2"))
+        mainPanel(            
+          plotOutput("plot1"),
+            conditionalPanel(
+                condition = "input.compare == true",  # Display plot2 only if compare is checked
+                plotOutput("plot2"))
+        )
     )
 )
 
@@ -83,24 +88,18 @@ ui <- fluidPage(
 # Define the server
 server <- function(input, output){
     # Render the histograms
-  if (input$compare){
     output$plot1 <- renderPlot({
       region_data<-data[data$Entity==input$region1,]
       # Plot all death reasons
       ggplot(region_data, aes_string(x="Year", y=input$reason)) + geom_line(color="blue") + labs(x="Year", y = input$reason)
     })
-  } else{
-    output$plot1 <- renderPlot({
-      region_data<-data[data$Entity==input$region1,]
-      # Plot all death reasons
-      ggplot(region_data, aes_string(x="Year", y=input$reason)) + geom_line(color="blue") + labs(x="Year", y = input$reason)
-    })
-    output$plot2 <- renderPlot({
+    output$plot2 <- renderPlot({ 
+      if (input$compare == TRUE){
       region_data<-data[data$Entity==input$region2,]
       # Plot all death reasons
       ggplot(region_data, aes_string(x="Year", y=input$reason)) + geom_line(color="blue") + labs(x="Year", y = input$reason)
-    })
-  }
+    }
+  })
 }
 
 # Run the Shiny app
