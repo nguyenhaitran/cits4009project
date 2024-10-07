@@ -14,6 +14,7 @@ knitr::opts_chunk$set(echo = TRUE)
 library(ggplot2)
 library(shiny)
 library(gridExtra)
+library(reshape2)
 ```
 
 ```{r}
@@ -68,20 +69,27 @@ For data exploratory, it will be done using Shiny app
 # Define UI for application that draws different plot
 ui <- fluidPage(
     titlePanel("Histogram of death in country/region during 1990 - 2019"),
+    selectInput("plot_type", "Select plot type:", choices = c("Line plot", "Heat map")),
     sidebarLayout(
         sidebarPanel(
-            checkboxInput("compare", "Compare between 2 countries/regions", FALSE),
+            conditionalPanel(
+              condition = "input.plot_type == 'Line plot'",
+              checkboxInput("compare", "Compare between 2 countries/regions", FALSE),
+            ),
             selectInput("region1", "Choose the first country/region:", choices = unique(data$Entity)),
             conditionalPanel(
               condition = "input.compare == true",
               selectInput("region2", "Choose the second country/region:", choices = unique(data$Entity))
             ),
-            selectInput("reason", "Choose death reason:", choices = names(data)[4:31]),
+            conditionalPanel(
+              condition = "input.plot_type == 'Line plot'",
+              selectInput("reason", "Choose death reason:", choices = names(data)[4:31])
+            ),
         ),
         mainPanel(            
           plotOutput("plot1"),
             conditionalPanel(
-                condition = "input.compare == true",  # Display plot2 only if compare is checked
+                condition = "input.compare == true && input.plot_type == 'Line plot'",  # Display plot2 only if compare is checked
                 plotOutput("plot2"))
         )
     )
@@ -93,14 +101,27 @@ server <- function(input, output){
     # Render the histograms
     output$plot1 <- renderPlot({
       region_data<-data[data$Entity==input$region1,]
-      # Plot all death reasons
-      ggplot(region_data, aes_string(x="Year", y=input$reason)) + geom_line(color="blue") + labs(x="Year", y = input$reason)
+      # Plot selected death reason
+      if (input$plot_type == 'Line plot'){
+      ggplot(region_data, aes_string(x="Year", y=input$reason)) + geom_line(color="darkorange") + labs(x="Year", y = input$reason)}
+      # Plot the Heat Map for selected country
+      else if (input$plot_type == 'Heat map'){
+        data_melt <- melt(region_data, id.vars = "Year", measure.vars = names(data)[4:31], variable.name = "death_reason", value.name = "value")
+        # Create heat map
+        ggplot(data_melt, aes(x = Year, y = death_reason, fill = value)) + 
+            geom_tile() + 
+            scale_fill_gradient(low = "white", high = "blue") +
+            scale_x_continuous(breaks = seq(1990, 2019, by = 2)) +
+            labs(x = "Year", y = "Death Reason", title = paste("Heat Map of Death Reasons in", input$region1)) +
+            theme_minimal() +
+            theme(axis.text.x = element_text(angle = 45, hjust = 1))
+      }
     })
     output$plot2 <- renderPlot({ 
-      if (input$compare == TRUE){
+      if (input$compare == TRUE && input$plot_type == 'Line plot'){
       region_data<-data[data$Entity==input$region2,]
       # Plot all death reasons
-      ggplot(region_data, aes_string(x="Year", y=input$reason)) + geom_line(color="blue") + labs(x="Year", y = input$reason)
+      ggplot(region_data, aes_string(x="Year", y=input$reason)) + geom_line(color="darkolivegreen") + labs(x="Year", y = input$reason)
     }
   })
 }
