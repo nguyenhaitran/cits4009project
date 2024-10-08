@@ -47,11 +47,19 @@ For the first 2 columns, "Entity" and "Code" store different country names and c
 ```{r}
 data$Entity<-as.factor(data$Entity)
 data$Code<-as.factor(data$Code)
+data$Year<-as.factor(data$Year)
 
 summary(data)
 str(data)
 ```
 There are 228 unique entities but there are only 206 codes in this dataset. The reason is because there are some countries and regions do not have unique codes.
+
+There are also no missing data
+
+```{r}
+total_missing_value = sum(is.na(data))
+total_missing_value
+```
 
 While with remaining 29 columns, the maximum numbers are extremely larger than other values. The reason is because the dataset did not only record deaths of countries, but it also recorded the total deaths in groups, regions and in the world. Therefore, if we do the data analysis on the whole dataset, it will create skewness problem. The solution for this would be we can seperated data into different groups: countries, regions and world. I have some examples of the single eda below:
 
@@ -61,6 +69,11 @@ boxplot(data$High_systolic_blood_pressure)
 ```{r}
 boxplot(data$Outdoor_air_pollution)
 ```
+```{r}
+eg1<-log1p(data$Outdoor_air_pollution)
+boxplot(eg1)
+```
+
 
 
 For data exploratory, it will be done using Shiny app
@@ -103,7 +116,10 @@ server <- function(input, output){
       region_data<-data[data$Entity==input$region1,]
       # Plot selected death reason
       if (input$plot_type == 'Line plot'){
-      ggplot(region_data, aes_string(x="Year", y=input$reason)) + geom_line(color="darkorange") + labs(x="Year", y = input$reason)}
+      ggplot(region_data, aes_string(x="Year", y=input$reason, group = "Entity")) +
+          geom_line(color="darkorange") + 
+          labs(x="Year", y = input$reason) +
+          theme(axis.text.x = element_text(angle = 45, hjust = 1))}
       # Plot the Heat Map for selected country
       else if (input$plot_type == 'Heat map'){
         data_melt <- melt(region_data, id.vars = "Year", measure.vars = names(data)[4:31], variable.name = "death_reason", value.name = "value")
@@ -111,7 +127,7 @@ server <- function(input, output){
         ggplot(data_melt, aes(x = Year, y = death_reason, fill = value)) + 
             geom_tile() + 
             scale_fill_gradient(low = "aliceblue", high = "blue") +
-            scale_x_continuous(breaks = seq(1990, 2019, by = 2)) +
+            scale_x_discrete(breaks = levels(region_data$Year)) +
             labs(x = "Year", y = "Death Reason", title = paste("Heat Map of Death Reasons in", input$region1)) +
             theme_minimal() +
             theme(axis.text.x = element_text(angle = 45, hjust = 1))
@@ -121,7 +137,7 @@ server <- function(input, output){
         numeric_data <- region_data[,4:31]
          
         # Calculate the correlation for all variables
-        correlation <- cor(numeric_data, use = "complete.obs")
+        correlation <- cor(numeric_data)
         
         # Melt the correlation for visualization
         correlation_melted <- melt(correlation)
@@ -139,7 +155,7 @@ server <- function(input, output){
       if (input$compare == TRUE && input$plot_type == 'Line plot'){
       region_data<-data[data$Entity==input$region2,]
       # Plot all death reasons
-      ggplot(region_data, aes_string(x="Year", y=input$reason)) + geom_line(color="darkolivegreen") + labs(x="Year", y = input$reason)
+      ggplot(region_data, aes_string(x="Year", y=input$reason, group ="Entity")) + geom_line(color="darkolivegreen") + labs(x="Year", y = input$reason)
     }
   })
 }
@@ -155,7 +171,7 @@ The data needs to be transformed, including divided the data into different grou
  - facet line plot - show individual trend for each death reasons of each country
  - stacked bar chart - show the different number of deaths per years for a country 
 
-
+Choose response and the feature variables. 
 
 
 
