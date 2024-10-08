@@ -31,12 +31,6 @@ nrow(data)
 The data has 31 columns and 6840 rows. For the column names, they can be seen that the column names have dot-separated between each word.
 
 ```{r}
-names(data)<-gsub("\\.", "_", names(data)) #remove the dot in the column names
-
-data
-```
-
-```{r}
 str(data)
 ```
 ```{r}
@@ -52,6 +46,8 @@ data$Year<-as.factor(data$Year)
 summary(data)
 str(data)
 ```
+
+
 There are 228 unique entities but there are only 206 codes in this dataset. The reason is because there are some countries and regions do not have unique codes.
 
 There are also no missing data
@@ -64,13 +60,10 @@ total_missing_value
 While with remaining 29 columns, the maximum numbers are extremely larger than other values. The reason is because the dataset did not only record deaths of countries, but it also recorded the total deaths in groups, regions and in the world. Therefore, if we do the data analysis on the whole dataset, it will create skewness problem. The solution for this would be we can seperated data into different groups: countries, regions and world. I have some examples of the single eda below:
 
 ```{r}
-boxplot(data$High_systolic_blood_pressure)
+boxplot(data$High.systolic.blood.pressure)
 ```
 ```{r}
-boxplot(data$Outdoor_air_pollution)
-```
-```{r}
-eg1<-log1p(data$Outdoor_air_pollution)
+eg1<-log1p(data$Outdoor.air.pollution)
 boxplot(eg1)
 ```
 
@@ -82,7 +75,7 @@ For data exploratory, it will be done using Shiny app
 # Define UI for application that draws different plot
 ui <- fluidPage(
     titlePanel("Visualisation of death in country/region during 1990 - 2019"),
-    selectInput("plot_type", "Select plot type:", choices = c("Line plot", "Heat map", "Correlation plot")),
+    selectInput("plot_type", "Select plot type:", choices = c("Line plot", "Boxplot", "Heat map", "Correlation plot")),
     sidebarLayout(
         sidebarPanel(
             conditionalPanel(
@@ -100,10 +93,10 @@ ui <- fluidPage(
             ),
         ),
         mainPanel(            
-          plotOutput("plot1"),
+          plotOutput("plot1", width = "100%", height = "600px"),
             conditionalPanel(
                 condition = "input.compare == true && input.plot_type == 'Line plot'",  # Display plot2 only if compare is checked
-                plotOutput("plot2"))
+                plotOutput("plot2", width = "100%", height = "600px"))
         )
     )
 )
@@ -120,6 +113,18 @@ server <- function(input, output){
           geom_line(color="darkorange") + 
           labs(x="Year", y = input$reason) +
           theme(axis.text.x = element_text(angle = 45, hjust = 1))}
+      # Plot the boxplot
+      else if (input$plot_type == 'Boxplot'){
+        data_melt <- melt(region_data, id.vars = "Year", measure.vars = names(data)[4:31], 
+                          variable.name = "death_reason", value.name = "value")
+        ggplot(data_melt, aes(x = death_reason, y = value, fill = death_reason)) +
+          geom_boxplot() +
+          labs(x = "Death Reason", y = "Number of Deaths", title = paste("Boxplot of Death Reasons in", input$region1)) +
+          theme_minimal() +
+          theme(axis.text.x = element_text(angle = 45, hjust = 1), legend.position = "top")+
+          guides(fill = guide_legend(ncol = 3))
+        }
+      
       # Plot the Heat Map for selected country
       else if (input$plot_type == 'Heat map'){
         data_melt <- melt(region_data, id.vars = "Year", measure.vars = names(data)[4:31], variable.name = "death_reason", value.name = "value")
@@ -163,15 +168,80 @@ server <- function(input, output){
 # Run the Shiny app
 shinyApp(ui = ui, server = server)
 ```
-The data needs to be transformed, including divided the data into different groups, including countries, regions, and the world.
+The data needs to be transformed, including divided the data into different groups, including countries, regions. Additionally, log-transformation will be applied for data transformation
 
-### some ideas of single variable EDA
+## Data Transformation
 
-### some ideas of multiple variables EDA:
- - facet line plot - show individual trend for each death reasons of each country
- - stacked bar chart - show the different number of deaths per years for a country 
+Firstly, the data will be divided into 2 groups: country and region
 
-Choose response and the feature variables. 
+There are 28 countries and regions in this data. There are few information we can know if the Entity is a region, including:
+- Ends with (WB) or (WHO)
+- Start with "World"
+- G20
+And anything other than this will be considered to be countries.
+Here is how we will divide the data into groups
+
+```{r}
+region_patterns <- grepl("(WB)|(WHO)|^World|^G20", data$Entity)
+
+regions<-data[region_mask,]
+countries<-data[!region_mask,]
+```
+
+```{r}
+countries
+```
+
+
+```{r}
+regions
+```
+
+```{r}
+wb_mask<-grepl("(WB)", regions$Entity)
+who_mask<-grepl("(WHO)", regions$Entity)
+world_mask<-grepl("World", regions$Entity)
+world_bank_mask<-grepl("World Bank", regions$Entity)
+G20_mask<-grepl("G20", regions$Entity)
+```
+
+```{r}
+wb_data<-regions[wb_mask,]
+wb_data
+```
+
+```{r}
+boxplot(wb_data)
+```
+```{r}
+unique(wb_data$Entity)
+```
+
+
+```{r}
+```
+
+
+
+```{r}
+who_data<-regions[who_mask,]
+who_data
+```
+```{r}
+world_data<-regions[world_mask,]
+world_data
+```
+```{r}
+world_bank_data<-regions[world_bank_mask,]
+world_bank_data
+```
+
+
+```{r}
+g20_data<-regions[G20_mask,]
+g20_data
+```
+
 
 
 
