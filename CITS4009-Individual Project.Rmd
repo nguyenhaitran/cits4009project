@@ -15,6 +15,7 @@ library(ggplot2)
 library(shiny)
 library(gridExtra)
 library(reshape2)
+library(readxl)
 ```
 
 ```{r}
@@ -45,6 +46,10 @@ data$Year<-as.factor(data$Year)
 
 summary(data)
 str(data)
+```
+
+```{r}
+unique(data$Entity)
 ```
 
 
@@ -182,7 +187,7 @@ And anything other than this will be considered to be countries.
 Here is how we will divide the data into groups
 
 ```{r}
-region_patterns <- grepl("(WB)|(WHO)|^World|^G20", data$Entity)
+region_mask <- grepl("(WB)|(WHO)|^World|^G20|^OECD", data$Entity)
 
 regions<-data[region_mask,]
 countries<-data[!region_mask,]
@@ -192,55 +197,82 @@ countries<-data[!region_mask,]
 countries
 ```
 
-
 ```{r}
 regions
 ```
 
 ```{r}
-wb_mask<-grepl("(WB)", regions$Entity)
-who_mask<-grepl("(WHO)", regions$Entity)
-world_mask<-grepl("World", regions$Entity)
-world_bank_mask<-grepl("World Bank", regions$Entity)
-G20_mask<-grepl("G20", regions$Entity)
-```
-
-```{r}
-wb_data<-regions[wb_mask,]
-wb_data
-```
-
-```{r}
-boxplot(wb_data)
-```
-```{r}
-unique(wb_data$Entity)
 ```
 
 
+#Model: Binary classification low income countries based on death causes
+For the classification model, the model will classify the Sub-Saharan African countries based on the death causes. The reason to build this model is because the Sub-Saharan African countries could have different death causes compared to countries from other regions.
+
+According to World Bank, there are 48 countries in the low-income groups. Therefore, we will have a column to label them, the country in Sub-Saharan African region will be 1 and 0 for countries from other regions. 
+
+There is a data file of countries in regions from World Bank. This file will be merge with the current data that we are processing
+
 ```{r}
+#Here is my file path, please change to your filepath to where you downloaded the file
+path<-"/Users/henrytran/Documents/UWA_Master-Data-Science/CITS4009/Project/"
 ```
 
-
-
 ```{r}
-who_data<-regions[who_mask,]
-who_data
+country_groups_file<- paste0(path, "World Bank Country Groups.xlsx")
+country_groups_df<-read_excel(country_groups_file, sheet = "List of economies")
+head(country_groups_df)
 ```
+The data that we need will include the the Economy, Code and Income group. Therefore, we will keep only 3 columns
+
 ```{r}
-world_data<-regions[world_mask,]
-world_data
+country_groups_df<-country_groups_df[,c(1,2,3)] #We need the first 3 columns - Economy, Code, Region
+country_groups_df
 ```
+Now, we will merge countries dataset with country groups dataset using Code as key, and we keep all the data on the countries dataset
 ```{r}
-world_bank_data<-regions[world_bank_mask,]
-world_bank_data
+countries_merged<-merge(countries, country_groups_df, by.x="Code", by.y="Code", all.x=TRUE)
+countries_merged
+```
+As there are 4 countries do not have Code, including Northen Ireland, Wales, Scotland, and England. They are all in United Kingdom (UK). Now we will double check to see if the total death of UK is the same to the total death of 4 countries
+```{r}
+countries_merged[countries_merged$Entity=="United Kingdom",]
 ```
 
 
 ```{r}
-g20_data<-regions[G20_mask,]
-g20_data
+total_uk_death <- colSums(countries_merged[countries_merged$Entity=="United Kingdom", 4:31], na.rm = TRUE)
+total_uk_death
 ```
+
+```{r}
+four_countries_death <- subset(countries_merged, Entity %in% c("England", "Northern Ireland", "Wales", "Scotland"))
+four_countries_death
+```
+```{r}
+total_four_countries_death <- colSums(four_countries_death[, 4:31], na.rm = TRUE)
+total_four_countries_death
+```
+After calculating the total deaths of 4 countries over years, the numbers of death recorded for each reasons are almost the same to the total deaths of UK over years. Therefore, we will drop these 4 countries out of the countries merged dataset.
+
+Now we will calculate the total death of each country for all death causes
+```{r}
+countries_merged<-merge(countries, country_groups_df, by.x="Code", by.y="Code")
+countries_merged<-countries_merged[,-32]
+countries_merged
+```
+```{r}
+total_deaths_by_country <- aggregate(. ~ Entity, data = countries_merged[, c("Entity","Region", 4:31)], sum)
+
+# View the result
+print(total_deaths_by_country)
+```
+
+
+
+
+
+
+we will aggregate the data of number of death of each death causes of each country. We will aggregate the total of death for each country over years for all death causes
 
 
 
