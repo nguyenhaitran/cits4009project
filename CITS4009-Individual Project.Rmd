@@ -16,6 +16,7 @@ library(shiny)
 library(gridExtra)
 library(reshape2)
 library(readxl)
+library(dplyr)
 ```
 
 ```{r}
@@ -254,26 +255,20 @@ total_four_countries_death
 ```
 After calculating the total deaths of 4 countries over years, the numbers of death recorded for each reasons are almost the same to the total deaths of UK over years. Therefore, we will drop these 4 countries out of the countries merged dataset.
 
-Now we will calculate the total death of each country for all death causes
+Now we will calculate the total death of each country for all death causes.
 ```{r}
 countries_merged<-merge(countries, country_groups_df, by.x="Code", by.y="Code")
 countries_merged<-countries_merged[,-32]
 countries_merged
 ```
 ```{r}
-total_deaths_by_country <- aggregate(. ~ Entity, data = countries_merged[, c("Entity","Region", 4:31)], sum)
+# For the data, group the data into entity and region, then calculate the total death of each death causes of each country
+total_deaths_by_country <- countries_merged %>% group_by(Entity, Region) %>% summarise(across(c("Outdoor.air.pollution": "Iron.deficiency"), sum))
 
 # View the result
 print(total_deaths_by_country)
+
 ```
-
-
-
-
-
-
-we will aggregate the data of number of death of each death causes of each country. We will aggregate the total of death for each country over years for all death causes
-
 
 
 
