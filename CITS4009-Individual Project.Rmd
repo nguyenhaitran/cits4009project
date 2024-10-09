@@ -10,7 +10,7 @@ knitr::opts_chunk$set(echo = TRUE)
 ```
 
 ```{r}
-# Install all the required packages
+# Install all the required packages for data processing, data transformation and data visualization
 library(ggplot2)
 library(shiny)
 library(gridExtra)
@@ -206,7 +206,8 @@ regions
 ```
 
 
-#Model: Binary classification low income countries based on death causes
+#Model: Binary classification Sub-Saharan African countries based on death causes
+## Data Transformation
 For the classification model, the model will classify the Sub-Saharan African countries based on the death causes. The reason to build this model is because the Sub-Saharan African countries could have different death causes compared to countries from other regions.
 
 According to World Bank, there are 48 countries in the low-income groups. Therefore, we will have a column to label them, the country in Sub-Saharan African region will be 1 and 0 for countries from other regions. 
@@ -263,12 +264,127 @@ countries_merged
 ```
 ```{r}
 # For the data, group the data into entity and region, then calculate the total death of each death causes of each country
-total_deaths_by_country <- countries_merged %>% group_by(Entity, Region) %>% summarise(across(c("Outdoor.air.pollution": "Iron.deficiency"), sum))
-
-# View the result
-print(total_deaths_by_country)
-
+total_countries_death <- countries_merged %>% group_by(Entity, Region) %>% summarise(across(c("Outdoor.air.pollution": "Iron.deficiency"), sum))
+total_countries_death
 ```
+
+After aggregating the model, now we will create a label for each country. As mentioned previously, the countries in Sub-Saharan African region will be 1 and 0 for countries from other regions. 
+
+```{r}
+total_countries_death$Label<-ifelse(total_countries_death$Region == "Sub-Saharan Africa", 1, 0)
+total_countries_death$Label<-as.factor(total_countries_death$Label)
+total_countries_death
+```
+
+
+##Building model
+- Explain what a null model would look like for classification
+- Find all categorical variables and numerical variables
+- Expand the dataset with columns built from single variable models
+- Plot AUC and select the best performing variables according to AUC
+
+There are 2 models selected for Sub-Saharan African countries classification based on death causes. They are Decision Trees classifier, and Logistic Regression classifier
+
+First of all, the data needs to be divided into 2 groups: training and testing.
+```{r}
+set.seed(12345)
+random_mask<-runif(nrow(total_countries_death))<0.8 # 80% of data used for training
+train_data<-total_countries_death[random_mask,]
+test_data<-total_countries_death[!random_mask,]
+```
+
+```{r}
+train_data
+cat("Training dataset size is", dim(train_data))
+```
+```{r}
+test_data
+cat("Testing dataset size is", dim(test_data))
+```
+### Decision Trees
+Single-variate and Multi-Variate models
+
+
+
+### Logistic Regression
+Null model and full model
+
+```{r}
+sum(train_data$Label==1)/nrow(train_data)
+```
+
+```{r}
+# Step 1: Find the majority class in the training data
+majority_class <- as.numeric(names(sort(table(train_data$Label), decreasing = TRUE)[1]))
+
+# Step 2: Create predictions for the test set based on the majority class
+null_model_predictions <- rep(majority_class, nrow(test_data))
+
+# Step 3: Evaluate the null model performance
+library(caret)
+
+# Convert to factor to match the true label's type
+null_model_predictions <- as.factor(null_model_predictions)
+
+# Create a confusion matrix
+null_confusion_matrix <- confusionMatrix(null_model_predictions, test_data$Label)
+
+# View the results
+print(null_confusion_matrix)
+```
+
+This is the full model
+
+```{r}
+#import library caret for logistic linear regression
+library(caret)
+library(lime)
+```
+```{r}
+# we separated the columns, including the responses and all features
+responses<- colnames(total_countries_death) %in% c("Entity", "Region", "Label")
+all_features<-colnames(total_countries_death)[!responses]
+```
+
+```{r}
+log_full_model<-caret::train(x=train_data[all_features], y=train_data$Label, method="glm", family = binomial(link="logit"), metric="Accuracy")
+log_full_model_prediction<-predict(log_full_model, test_data[all_features])
+explainer<-lime(train_data[all_features], model=as_classifier(log_full_model), bin_continuous=TRUE, n_bins=10)
+```
+
+```{r}
+confusionMatrix(log_full_model_prediction, test_data$Label)
+```
+
+NOTE: this is the manual way of doing the logistic regression model:
+```{r}
+formula <- paste("Label", paste(all_features, collapse=" + "), sep=" ~ ")
+```
+
+```{r}
+model_logr <- glm(formula=formula, data=train_data, family=binomial(link="logit"))
+## Warning: glm.fit: algorithm did not converge
+## Warning: glm.fit: fitted probabilities numerically 0 or 1 occurred
+train_data$pred <- predict(model_logr, newdata=train_data, type="response")
+test_data$pred <- predict(model_logr, newdata=test_data, type="response")
+```
+
+```{r}
+library(knitr)
+kable(table(truth=test_data$Label, prediction=test_data$pred>0.5))
+```
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
