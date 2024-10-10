@@ -294,17 +294,125 @@ test_data<-total_countries_death[!random_mask,]
 ```
 
 ```{r}
+train_data<-train_data[,3:ncol(train_data)]
 train_data
 cat("Training dataset size is", dim(train_data))
 ```
 ```{r}
+test_data<-test_data[,3:ncol(test_data)]
 test_data
 cat("Testing dataset size is", dim(test_data))
 ```
+```{r}
+# we separated the columns, including the responses and all features
+responses<- colnames(total_countries_death) %in% c("Entity", "Region", "Label")
+all_features<-colnames(total_countries_death)[!responses]
+```
+
 ### Decision Trees
 Single-variate and Multi-Variate models
 
+#### Single-variate model
 
+We will loop through all of the numerical variable to create single variate models with the training data. Then the best single variate model will be selected
+
+Now we will run through all single numerical variables
+```{r}
+mkPredC<-function(outCol, varCol, appCol){ #training outcomes, training variable and prediction variable
+  outCol <- as.vector(outCol)
+  varCol <- as.vector(varCol)
+  appCol <- as.vector(appCol)
+  pOne<-sum(outCol==1)/length(outCol) #how often the outcome is 1 during training
+  #print(is.na(varCol))
+  #naTab<-table(as.factor(outCol[is.na(varCol)])) 
+  #pOneWna<-(naTab/sum(naTab))[pos] #how often the outcome is positive for NA values
+  vTab<-table(as.factor(outCol), varCol)
+  pOneWv<-(vTab[1,]+ 1.0e-3 *pOne)/(colSums(vTab)+ 1.0e-3) #how often the outcome is 1 with conditioned on levels of training variable
+  pred<-pOneWv[appCol] #make prediction by looking up levels of appCol
+  #pred[is.na(appCol)]<-pOneWna  #add prediction for NA levels of appCol
+  pred[is.na(pred)]<-pOne #add prediction for appCol that were unknown when training
+  pred
+}
+
+mkPredN<- function(outCol, varCol, appCol){
+  varCol <- as.numeric(varCol)  # Ensure it's numeric
+  appCol <- as.numeric(appCol)  # Ensure it's numeric
+  cuts<-unique(quantile(varCol, probs = seq(0,1,0.1), na.rm=T))
+  varC<-cut(varCol, cuts)
+  appC<-cut(appCol, cuts)
+  mkPredC(outCol, varC, appC)
+}
+```
+
+```{r}
+library('ROCR')
+
+calcAUC <- function(predcol,outcol) {
+  perf <- performance(prediction(predcol,outcol==1),'auc')
+  as.numeric(perf@y.values)
+}
+```
+
+```{r}
+for(var in all_features) {
+  pi <- paste('pred', var, sep='')
+  train_data[,pi] <- mkPredN(train_data[["Label"]], as.numeric(unlist(train_data[[var]])), as.numeric(unlist(train_data[[var]])))
+  test_data[,pi] <- mkPredN(test_data[["Label"]], as.numeric(unlist(test_data[[var]])),as.numeric(unlist(test_data[[var]])))
+  aucTrain <- calcAUC(train_data[,pi], train_data[,"Label"])
+  #if(aucTrain >= 0.50) {
+    aucTest <- calcAUC(test_data[,pi], test_data[,"Label"])
+    print(sprintf("%s: trainAUC: %4.3f; testAUC: %4.3f",pi, aucTrain, aucTest))
+  #}
+}
+```
+The best single feature selection is based on the largest log likelihood value
+```{r}
+# Create a function to calculate the log likelihood
+logLikelihood<-function(ytrue, ypred, epsilon = 1e-15){
+  ypred <- pmin(pmax(ypred, epsilon), 1 - epsilon)
+  sum(ifelse(ytrue==1, log(ypred+epsilon), log(1-ypred-epsilon)), na.rm=T)
+}
+```
+
+We will calculate the Null model on the training dataset
+```{r}
+logNull<-logLikelihood(train_data[,"Label"], sum(train_data[,"Label"]==1)/nrow(train_data))
+cat(logNull)
+```
+
+```{r}
+one_num_var<-c()
+minDrop<-10
+for (var in all_features){
+  pi<-paste("pred", var, sep='')
+  
+  devDrop<-2*(logLikelihood(train_data[,"Label"], as.numeric(train_data[[pi]]))-logNull)
+  #if (devDrop>=minDrop){
+    print(sprintf("%s, deviance reduction: %g", pi, devDrop))
+    one_num_var<-c(one_num_var, pi)
+  #}
+}
+```
+
+#### Multi-variate model
+```{r}
+library(rpart)
+library(rpart.plot)
+decision_multivar_model <- rpart(Label==1 ~ ., data = train_data[, c(all_features, "Label")], method = "class",control = rpart.control(cp = 0.01))
+rpart.plot(decision_multivar_model)
+```
+```{r}
+#predict(decision_multivar_model, train_data, type ="prob")
+print(calcAUC(predict(decision_multivar_model, train_data, type ="prob")[,2], train_data[, "Label"]))
+```
+
+```{r}
+print(calcAUC(predict(decision_multivar_model, train_data)[,2], train_data[,"Label"]))
+```
+
+```{r}
+print(calcAUC(predict(decision_multivar_model, test_data)[,2], test_data[,"Label"]))
+```
 
 ### Logistic Regression
 Null model and full model
@@ -339,11 +447,6 @@ This is the full model
 #import library caret for logistic linear regression
 library(caret)
 library(lime)
-```
-```{r}
-# we separated the columns, including the responses and all features
-responses<- colnames(total_countries_death) %in% c("Entity", "Region", "Label")
-all_features<-colnames(total_countries_death)[!responses]
 ```
 
 ```{r}
