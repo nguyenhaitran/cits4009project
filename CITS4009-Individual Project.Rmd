@@ -420,7 +420,7 @@ print(calcAUC(predict(decision_singlevar_model, train_data)[,2], train_data[,"La
 print(calcAUC(predict(decision_singlevar_model, test_data)[,2], test_data[,"Label"]))
 ```
 
-We will build a function to create the confusion matrix for both decision tree and logistic regression classifier
+We will build a function to create the confusion matrix for both decision tree and logistic regression classifiers
 ```{r}
 performanceMeasures <- function(pred, truth, name = "model") {
   # Construct confusion matrix ensuring all levels (0 and 1) are present
@@ -458,8 +458,6 @@ pretty_perf_table <- function(model,training,test, feature, model_type) {
   pandoc.table(perftable, justify = perf_justify)
 }
 ```
-
-
 
 ```{r}
 pretty_perf_table(decision_singlevar_model, train_data, test_data, all_features, "decision_tree")
