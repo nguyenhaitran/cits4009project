@@ -202,10 +202,6 @@ countries
 regions
 ```
 
-```{r}
-```
-
-
 #Model: Binary classification Sub-Saharan African countries based on death causes
 ## Data Transformation
 For the classification model, the model will classify the Sub-Saharan African countries based on the death causes. The reason to build this model is because the Sub-Saharan African countries could have different death causes compared to countries from other regions.
@@ -222,12 +218,12 @@ path<-"/Users/henrytran/Documents/UWA_Master-Data-Science/CITS4009/Project/"
 ```{r}
 country_groups_file<- paste0(path, "World Bank Country Groups.xlsx")
 country_groups_df<-read_excel(country_groups_file, sheet = "List of economies")
-head(country_groups_df)
+country_groups_df
 ```
 The data that we need will include the the Economy, Code and Income group. Therefore, we will keep only 3 columns
 
 ```{r}
-country_groups_df<-country_groups_df[,c(1,2,3)] #We need the first 3 columns - Economy, Code, Region
+country_groups_df<-country_groups_df[,c(1,2,4)] #We need the first 3 columns - Economy, Code, Region
 country_groups_df
 ```
 Now, we will merge countries dataset with country groups dataset using Code as key, and we keep all the data on the countries dataset
@@ -263,17 +259,27 @@ countries_merged<-countries_merged[,-32]
 countries_merged
 ```
 ```{r}
-# For the data, group the data into entity and region, then calculate the total death of each death causes of each country
-total_countries_death <- countries_merged %>% group_by(Entity, Region) %>% summarise(across(c("Outdoor.air.pollution": "Iron.deficiency"), sum))
+# For the data, group the data into entity and income groups, then calculate the total death of each death causes of each country
+names(countries_merged)[names(countries_merged) == "Income group"] <- "Income.group"
+total_countries_death <- countries_merged %>% group_by(Entity, Income.group) %>% summarise(across(c("Outdoor.air.pollution": "Iron.deficiency"), sum))
 total_countries_death
 ```
 
-After aggregating the model, now we will create a label for each country. As mentioned previously, the countries in Sub-Saharan African region will be 1 and 0 for countries from other regions. 
+After aggregating the model, now we will create a label for each country. As mentioned previously, the countries in  region will be 1 and 0 for countries from other regions. 
 
 ```{r}
-total_countries_death$Label<-ifelse(total_countries_death$Region == "Sub-Saharan Africa", 1, 0)
+total_countries_death$Label<-ifelse(total_countries_death$Income.group == "High income", 1, 0)
 total_countries_death$Label<-as.factor(total_countries_death$Label)
 total_countries_death
+```
+```{r}
+#check if there is any NA values in the data
+sum(is.na(total_countries_death))
+total_countries_death[!complete.cases(total_countries_death),]
+```
+There is one country - Venezuela, which was not classified with income group. As the dataset has 201 rows and only one row has NA values, it is a good decision for us to remove this value
+```{r}
+total_countries_death <- na.omit(total_countries_death)
 ```
 
 
@@ -305,7 +311,7 @@ cat("Testing dataset size is", dim(test_data))
 ```
 ```{r}
 # we separated the columns, including the responses and all features
-responses<- colnames(total_countries_death) %in% c("Entity", "Region", "Label")
+responses<- colnames(total_countries_death) %in% c("Entity", "Income.group", "Label")
 all_features<-colnames(total_countries_death)[!responses]
 ```
 
@@ -359,12 +365,14 @@ for(var in all_features) {
   train_data[,pi] <- mkPredN(train_data[["Label"]], as.numeric(unlist(train_data[[var]])), as.numeric(unlist(train_data[[var]])))
   test_data[,pi] <- mkPredN(test_data[["Label"]], as.numeric(unlist(test_data[[var]])),as.numeric(unlist(test_data[[var]])))
   aucTrain <- calcAUC(train_data[,pi], train_data[,"Label"])
-  #if(aucTrain >= 0.50) {
+  if(aucTrain >= 0.30) {
     aucTest <- calcAUC(test_data[,pi], test_data[,"Label"])
     print(sprintf("%s: trainAUC: %4.3f; testAUC: %4.3f",pi, aucTrain, aucTest))
-  #}
+  }
 }
 ```
+When calculating the area under the curve (AUC), it shows that the Secondhand.smoke variable has the highest AUC for training data, with value of 0.383. While looking at the AUC values for testing data, Smoking has the highest AUC with value of 0.318
+
 The best single feature selection is based on the largest log likelihood value
 ```{r}
 # Create a function to calculate the log likelihood
@@ -374,36 +382,48 @@ logLikelihood<-function(ytrue, ypred, epsilon = 1e-15){
 }
 ```
 
-We will calculate the Null model on the training dataset
+For the best single variable selection, we will calculate the log likelihood to select the best single variable to build the model.
+Firstly, we will calculate the Null model on the training dataset
 ```{r}
-logNull<-logLikelihood(train_data[,"Label"], sum(train_data[,"Label"]==1)/nrow(train_data))
+logNull<-logLikelihood(train_data[,"Label"], sum(train_data[,"Label"]==0)/nrow(train_data))
 cat(logNull)
 ```
 
+Now we will calculate the log likelihood for all variables
 ```{r}
 one_num_var<-c()
-minDrop<-10
+minDrop<-100 # this is as a value to filter the data
 for (var in all_features){
   pi<-paste("pred", var, sep='')
   
-  devDrop<-2*(logLikelihood(train_data[,"Label"], as.numeric(train_data[[pi]]))-logNull)
-  #if (devDrop>=minDrop){
+  devDrop<-2*(logLikelihood(test_data[,"Label"], test_data[[pi]])-logNull)
+  if (devDrop>=minDrop){
     print(sprintf("%s, deviance reduction: %g", pi, devDrop))
     one_num_var<-c(one_num_var, pi)
-  #}
+  }
 }
+```
+Among all the vairables satisfied with the condition of log likelihood larger than 100, Smoking is the model with the highest value of 185.363, slightly above the Diet low in Vegitables of 184.449. Therefore, we will use smoking as a variable to build the decision tree classification model.
+
+```{r}
+library(rpart)
+library(rpart.plot)
+decision_singlevar_model <- rpart(Label ~ ., data = train_data[, c("Smoking", "Label")], method = "class")
+rpart.plot(decision_singlevar_model)
+```
+
+```{r}
+print(calcAUC(predict(decision_singlevar_model, train_data)[,2], train_data[,"Label"]))
+```
+
+```{r}
+print(calcAUC(predict(decision_singlevar_model, test_data)[,2], test_data[,"Label"]))
 ```
 
 #### Multi-variate model
 ```{r}
-library(rpart)
-library(rpart.plot)
 decision_multivar_model <- rpart(Label==1 ~ ., data = train_data[, c(all_features, "Label")], method = "class",control = rpart.control(cp = 0.01))
 rpart.plot(decision_multivar_model)
-```
-```{r}
-#predict(decision_multivar_model, train_data, type ="prob")
-print(calcAUC(predict(decision_multivar_model, train_data, type ="prob")[,2], train_data[, "Label"]))
 ```
 
 ```{r}
@@ -414,31 +434,13 @@ print(calcAUC(predict(decision_multivar_model, train_data)[,2], train_data[,"Lab
 print(calcAUC(predict(decision_multivar_model, test_data)[,2], test_data[,"Label"]))
 ```
 
+NOTE: NEED TO DO ROC PLOT FOR MODEL EVALUATION
+
 ### Logistic Regression
 Null model and full model
 
 ```{r}
 sum(train_data$Label==1)/nrow(train_data)
-```
-
-```{r}
-# Step 1: Find the majority class in the training data
-majority_class <- as.numeric(names(sort(table(train_data$Label), decreasing = TRUE)[1]))
-
-# Step 2: Create predictions for the test set based on the majority class
-null_model_predictions <- rep(majority_class, nrow(test_data))
-
-# Step 3: Evaluate the null model performance
-library(caret)
-
-# Convert to factor to match the true label's type
-null_model_predictions <- as.factor(null_model_predictions)
-
-# Create a confusion matrix
-null_confusion_matrix <- confusionMatrix(null_model_predictions, test_data$Label)
-
-# View the results
-print(null_confusion_matrix)
 ```
 
 This is the full model
@@ -448,6 +450,17 @@ This is the full model
 library(caret)
 library(lime)
 ```
+
+```{r}
+log_single_model<-caret::train(x=train_data["Smoking"], y=train_data$Label, method="glm", family = binomial(link="logit"), metric="Accuracy")
+log_single_model_prediction<-predict(log_single_model, test_data["Smoking"])
+explainer_single_model<-lime(train_data["Smoking"], model=as_classifier(log_single_model), bin_continuous=TRUE, n_bins=10)
+```
+
+```{r}
+
+```
+
 
 ```{r}
 log_full_model<-caret::train(x=train_data[all_features], y=train_data$Label, method="glm", family = binomial(link="logit"), metric="Accuracy")
