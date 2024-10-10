@@ -420,6 +420,51 @@ print(calcAUC(predict(decision_singlevar_model, train_data)[,2], train_data[,"La
 print(calcAUC(predict(decision_singlevar_model, test_data)[,2], test_data[,"Label"]))
 ```
 
+We will build a function to create the confusion matrix for both decision tree and logistic regression classifier
+```{r}
+performanceMeasures <- function(pred, truth, name = "model") {
+  # Construct confusion matrix ensuring all levels (0 and 1) are present
+  ctable <- table(factor(truth, levels = c(0, 1)), factor(pred > 0.322, levels = c(FALSE, TRUE)))
+  accuracy <- sum(diag(ctable)) / sum(ctable)
+  precision <- ifelse(sum(ctable[, 2]) == 0, 0, ctable[2, 2] / sum(ctable[, 2]))  # Prevent division by 0
+  recall <- ifelse(sum(ctable[2, ]) == 0, 0, ctable[2, 2] / sum(ctable[2, ]))  # Prevent division by 0
+  f1 <- ifelse(precision + recall == 0, 0, 2 * precision * recall / (precision + recall))  # Handle case where both are 0
+  data.frame(model = name, precision = precision, recall = recall, f1 = f1, accuracy = accuracy)
+}
+
+pretty_perf_table <- function(model,training,test, feature, model_type) {
+  library(pander)
+  # setting up Pander Options
+  panderOptions("plain.ascii", TRUE)
+  panderOptions("keep.trailing.zeros", TRUE)
+  panderOptions("table.style", "simple")
+  perf_justify <- "lrrrr"
+  # comparing performance on training vs. test
+  if (model_type == "logistic") {
+    pred_train <- predict(model, newdata=training[, feature], type="response")
+    pred_test <- predict(model, newdata=test[, feature], type="response")
+  } else if (model_type == "decision_tree") {
+    # For decision trees, we use the 'type="prob"' to get the probabilities
+    pred_train <- predict(model, newdata=training[, feature], type="prob")[, 2]  # second column for class 1
+    pred_test <- predict(model, newdata=test[, feature], type="prob")[, 2]  # second column for class 1
+  }
+  truth_train <- training[["Label"]]
+  truth_test <- test[["Label"]]
+  
+  trainperf_tree <- performanceMeasures(pred_train, truth_train, "logistic, training")
+  testperf_tree <- performanceMeasures(pred_test, truth_test, "logistic, test")
+  
+  perftable <- rbind(trainperf_tree, testperf_tree)
+  pandoc.table(perftable, justify = perf_justify)
+}
+```
+
+
+
+```{r}
+pretty_perf_table(decision_singlevar_model, train_data, test_data, all_features, "decision_tree")
+```
+
 #### Multi-variate model
 ```{r}
 decision_multivar_model <- rpart(Label==1 ~ ., data = train_data[, c(all_features, "Label")], method = "class",control = rpart.control(cp = 0.01))
@@ -436,58 +481,53 @@ print(calcAUC(predict(decision_multivar_model, test_data)[,2], test_data[,"Label
 
 NOTE: NEED TO DO ROC PLOT FOR MODEL EVALUATION
 
+```{r}
+pretty_perf_table(decision_multivar_model, train_data, test_data, all_features, "decision_tree")
+```
+
+
 ### Logistic Regression
-Null model and full model
+Null model, single variable and full model
+
+This is the Null model
 
 ```{r}
 sum(train_data$Label==1)/nrow(train_data)
 ```
 
-This is the full model
+This is the single variable
 
 ```{r}
-#import library caret for logistic linear regression
-library(caret)
-library(lime)
+log_single_model<-glm(formula=Label~Smoking, data=train_data, family=binomial(link="logit"))
+train_data$log_single_pred <- predict(log_single_model, newdata=train_data, type="response")
+test_data$log_single_pred <- predict(log_single_model, newdata=test_data, type="response")
 ```
 
 ```{r}
-log_single_model<-caret::train(x=train_data["Smoking"], y=train_data$Label, method="glm", family = binomial(link="logit"), metric="Accuracy")
-log_single_model_prediction<-predict(log_single_model, test_data["Smoking"])
-explainer_single_model<-lime(train_data["Smoking"], model=as_classifier(log_single_model), bin_continuous=TRUE, n_bins=10)
+pretty_perf_table(log_single_model, train_data, test_data, "Smoking", "logistic")
+```
+```{r}
+library(knitr)
+kable(table(truth=test_data$Label, prediction=test_data$log_single_pred>0.322))
+```
+
+For full model
+```{r}
+formula<-paste("Label", paste(all_features, collapse=" + "), sep=" ~ ")
+log_multiple_model<-glm(formula=formula, data=train_data, family=binomial(link="logit"))
+train_data$log_multiple_pred <- predict(log_multiple_model, newdata=train_data, type="response")
+test_data$log_multiple_pred <- predict(log_multiple_model, newdata=test_data, type="response")
 ```
 
 ```{r}
-
+pretty_perf_table(log_multiple_model, train_data, test_data, all_features, "logistic")
 ```
 
 
-```{r}
-log_full_model<-caret::train(x=train_data[all_features], y=train_data$Label, method="glm", family = binomial(link="logit"), metric="Accuracy")
-log_full_model_prediction<-predict(log_full_model, test_data[all_features])
-explainer<-lime(train_data[all_features], model=as_classifier(log_full_model), bin_continuous=TRUE, n_bins=10)
-```
-
-```{r}
-confusionMatrix(log_full_model_prediction, test_data$Label)
-```
 
 NOTE: this is the manual way of doing the logistic regression model:
 ```{r}
-formula <- paste("Label", paste(all_features, collapse=" + "), sep=" ~ ")
-```
-
-```{r}
-model_logr <- glm(formula=formula, data=train_data, family=binomial(link="logit"))
-## Warning: glm.fit: algorithm did not converge
-## Warning: glm.fit: fitted probabilities numerically 0 or 1 occurred
-train_data$pred <- predict(model_logr, newdata=train_data, type="response")
-test_data$pred <- predict(model_logr, newdata=test_data, type="response")
-```
-
-```{r}
-library(knitr)
-kable(table(truth=test_data$Label, prediction=test_data$pred>0.5))
+kable(table(truth=test_data$Label, prediction=test_data$log_multiple_pred>0.322))
 ```
 
 
