@@ -268,19 +268,25 @@ total_countries_death
 After aggregating the model, now we will create a label for each country. As mentioned previously, the countries in  region will be 1 and 0 for countries from other regions. 
 
 ```{r}
-total_countries_death$Label<-ifelse(total_countries_death$Income.group == "High income", 1, 0)
-total_countries_death$Label<-as.factor(total_countries_death$Label)
-total_countries_death
+label_total_countries_death<-total_countries_death
+label_total_countries_death$Label<-ifelse(total_countries_death$Income.group == "High income", 1, 0)
+label_total_countries_death$Label<-as.factor(label_total_countries_death$Label)
+label_total_countries_death
 ```
 ```{r}
 #check if there is any NA values in the data
-sum(is.na(total_countries_death))
-total_countries_death[!complete.cases(total_countries_death),]
+sum(is.na(label_total_countries_death))
+label_total_countries_death[!complete.cases(label_total_countries_death),]
 ```
 There is one country - Venezuela, which was not classified with income group. As the dataset has 201 rows and only one row has NA values, it is a good decision for us to remove this value
 ```{r}
-total_countries_death <- na.omit(total_countries_death)
+label_total_countries_death <- na.omit(label_total_countries_death)
 ```
+
+```{r}
+label_total_countries_death
+```
+
 
 
 ##Building model
@@ -294,9 +300,9 @@ There are 2 models selected for Sub-Saharan African countries classification bas
 First of all, the data needs to be divided into 2 groups: training and testing.
 ```{r}
 set.seed(12345)
-random_mask<-runif(nrow(total_countries_death))<0.8 # 80% of data used for training
-train_data<-total_countries_death[random_mask,]
-test_data<-total_countries_death[!random_mask,]
+random_mask<-runif(nrow(label_total_countries_death))<0.8 # 80% of data used for training
+train_data<-label_total_countries_death[random_mask,]
+test_data<-label_total_countries_death[!random_mask,]
 ```
 
 ```{r}
@@ -311,8 +317,8 @@ cat("Testing dataset size is", dim(test_data))
 ```
 ```{r}
 # we separated the columns, including the responses and all features
-responses<- colnames(total_countries_death) %in% c("Entity", "Income.group", "Label")
-all_features<-colnames(total_countries_death)[!responses]
+responses<- colnames(label_total_countries_death) %in% c("Entity", "Income.group", "Label")
+all_features<-colnames(label_total_countries_death)[!responses]
 ```
 
 ### Decision Trees
@@ -424,7 +430,7 @@ We will build a function to create the confusion matrix for both decision tree a
 ```{r}
 performanceMeasures <- function(pred, truth, name = "model") {
   # Construct confusion matrix ensuring all levels (0 and 1) are present
-  ctable <- table(factor(truth, levels = c(0, 1)), factor(pred > 0.322, levels = c(FALSE, TRUE)))
+  ctable <- table(factor(truth, levels = c(0, 1)), factor(pred > 0.5, levels = c(FALSE, TRUE)))
   accuracy <- sum(diag(ctable)) / sum(ctable)
   precision <- ifelse(sum(ctable[, 2]) == 0, 0, ctable[2, 2] / sum(ctable[, 2]))  # Prevent division by 0
   recall <- ifelse(sum(ctable[2, ]) == 0, 0, ctable[2, 2] / sum(ctable[2, ]))  # Prevent division by 0
@@ -477,8 +483,6 @@ print(calcAUC(predict(decision_multivar_model, train_data)[,2], train_data[,"Lab
 print(calcAUC(predict(decision_multivar_model, test_data)[,2], test_data[,"Label"]))
 ```
 
-NOTE: NEED TO DO ROC PLOT FOR MODEL EVALUATION
-
 ```{r}
 pretty_perf_table(decision_multivar_model, train_data, test_data, all_features, "decision_tree")
 ```
@@ -504,6 +508,7 @@ test_data$log_single_pred <- predict(log_single_model, newdata=test_data, type="
 ```{r}
 pretty_perf_table(log_single_model, train_data, test_data, "Smoking", "logistic")
 ```
+
 ```{r}
 library(knitr)
 kable(table(truth=test_data$Label, prediction=test_data$log_single_pred>0.322))
@@ -521,12 +526,90 @@ test_data$log_multiple_pred <- predict(log_multiple_model, newdata=test_data, ty
 pretty_perf_table(log_multiple_model, train_data, test_data, all_features, "logistic")
 ```
 
-
-
-NOTE: this is the manual way of doing the logistic regression model:
 ```{r}
 kable(table(truth=test_data$Label, prediction=test_data$log_multiple_pred>0.322))
 ```
+
+ROC plot
+```{r, fig.asp=1}
+library(ROCit)
+
+# Function to plot ROC curves for both logistic regression and decision tree models
+plot_roc <- function(predcol1_test, outcol1_test, predcol1_train, outcol1_train, 
+                     predcol2_test, outcol2_test, predcol2_train, outcol2_train) {
+  
+  # ROC for the first model (Logistic Regression)
+  roc_1_test <- rocit(score = predcol1_test, class = outcol1_test == 1)
+  roc_1_train <- rocit(score = predcol1_train, class = outcol1_train == 1)
+  
+  # ROC for the second model (Decision Tree)
+  roc_2_test <- rocit(score = predcol2_test, class = outcol2_test == 1)
+  roc_2_train <- rocit(score = predcol2_train, class = outcol2_train == 1)
+  
+  # Plot test data for both models
+  plot(roc_1_test, col = c("blue", "green"), lwd = 2, legend = FALSE, YIndex = FALSE, values = TRUE, asp = 1)
+  lines(roc_2_test$TPR ~ roc_2_test$FPR, col = c("red", "green"), lwd = 2)
+  
+  # Plot training data as dashed lines
+  lines(roc_1_train$TPR ~ roc_1_train$FPR, col = c("blue", "green"), lwd = 2, lty = 2)
+  lines(roc_2_train$TPR ~ roc_2_train$FPR, col = c("red","green"), lwd = 2, lty = 2)
+  
+  # Add a legend
+  legend("bottomright", col = c("blue", "red","green"), 
+         legend = c("Logistic Test", "Decision Tree Test", "Null Model", "Logistic Train", "Decision Tree Train"),
+         lwd = 2,lty = c(1, 1, 2, 2, 2))
+}
+
+# Generate predictions for both models on test and training datasets
+# For Logistic Regression Model
+pred_log_test <- predict(log_multiple_model, newdata = test_data, type = "response")
+pred_log_train <- predict(log_multiple_model, newdata = train_data, type = "response")
+
+# For Decision Tree Model (using probability predictions)
+pred_tree_test <- predict(decision_multivar_model, newdata = test_data, type = "prob")[, 2]
+pred_tree_train <- predict(decision_multivar_model, newdata = train_data, type = "prob")[, 2]
+
+# Now call the plot function with the appropriate data
+plot_roc(pred_log_test, test_data$Label, pred_log_train, train_data$Label,
+         pred_tree_test, test_data$Label, pred_tree_train, train_data$Label)
+
+```
+
+### Clustering
+We will now working on clustering our data. For this one, the total_countries_death data will be used. However, the column Income.group will not be included in this dataset, as it works as a label for the data. Therefore, the dataset will only include country with total death records for each of the death cause.
+```{r}
+label_total_countries_death<-label_total_countries_death[,-2] #Income.group is the second column
+label_total_countries_death<-label_total_countries_death[,-ncol(label_total_countries_death)] #Label is the last column
+label_total_countries_death
+```
+
+```{r}
+all_variables<-colnames(label_total_countries_death)[-1] #except the country column
+scale_data<-scale(label_total_countries_death[,all_variables]) # this will be the data where each column has 0 mean and unit standard deviation
+```
+
+```{r}
+scale_data
+```
+
+
+```{r}
+attr(scale_data, "scaled:scale")
+```
+```{r}
+attr(scale_data, "scaled:center")
+```
+
+```{r}
+
+```
+
+
+
+
+
+
+
 
 
 
