@@ -73,107 +73,6 @@ eg1<-log1p(data$Outdoor.air.pollution)
 boxplot(eg1)
 ```
 
-
-
-For data exploratory, it will be done using Shiny app
-
-```{r}
-# Define UI for application that draws different plot
-ui <- fluidPage(
-    titlePanel("Visualisation of death in country/region during 1990 - 2019"),
-    selectInput("plot_type", "Select plot type:", choices = c("Line plot", "Boxplot", "Heat map", "Correlation plot")),
-    sidebarLayout(
-        sidebarPanel(
-            conditionalPanel(
-              condition = "input.plot_type == 'Line plot'",
-              checkboxInput("compare", "Compare between 2 countries/regions", FALSE),
-            ),
-            selectInput("region1", "Choose the first country/region:", choices = unique(data$Entity)),
-            conditionalPanel(
-              condition = "input.compare == true",
-              selectInput("region2", "Choose the second country/region:", choices = unique(data$Entity))
-            ),
-            conditionalPanel(
-              condition = "input.plot_type == 'Line plot'",
-              selectInput("reason", "Choose death reason:", choices = names(data)[4:31])
-            ),
-        ),
-        mainPanel(            
-          plotOutput("plot1", width = "100%", height = "600px"),
-            conditionalPanel(
-                condition = "input.compare == true && input.plot_type == 'Line plot'",  # Display plot2 only if compare is checked
-                plotOutput("plot2", width = "100%", height = "600px"))
-        )
-    )
-)
-
-
-# Define the server
-server <- function(input, output){
-    # Render the histograms
-    output$plot1 <- renderPlot({
-      region_data<-data[data$Entity==input$region1,]
-      # Plot selected death reason
-      if (input$plot_type == 'Line plot'){
-      ggplot(region_data, aes_string(x="Year", y=input$reason, group = "Entity")) +
-          geom_line(color="darkorange") + 
-          labs(x="Year", y = input$reason) +
-          theme(axis.text.x = element_text(angle = 45, hjust = 1))}
-      # Plot the boxplot
-      else if (input$plot_type == 'Boxplot'){
-        data_melt <- melt(region_data, id.vars = "Year", measure.vars = names(data)[4:31], 
-                          variable.name = "death_reason", value.name = "value")
-        ggplot(data_melt, aes(x = death_reason, y = value, fill = death_reason)) +
-          geom_boxplot() +
-          labs(x = "Death Reason", y = "Number of Deaths", title = paste("Boxplot of Death Reasons in", input$region1)) +
-          theme_minimal() +
-          theme(axis.text.x = element_text(angle = 45, hjust = 1), legend.position = "top")+
-          guides(fill = guide_legend(ncol = 3))
-        }
-      
-      # Plot the Heat Map for selected country
-      else if (input$plot_type == 'Heat map'){
-        data_melt <- melt(region_data, id.vars = "Year", measure.vars = names(data)[4:31], variable.name = "death_reason", value.name = "value")
-        # Create heat map
-        ggplot(data_melt, aes(x = Year, y = death_reason, fill = value)) + 
-            geom_tile() + 
-            scale_fill_gradient(low = "aliceblue", high = "blue") +
-            scale_x_discrete(breaks = levels(region_data$Year)) +
-            labs(x = "Year", y = "Death Reason", title = paste("Heat Map of Death Reasons in", input$region1)) +
-            theme_minimal() +
-            theme(axis.text.x = element_text(angle = 45, hjust = 1))
-      }
-      else if (input$plot_type == "Correlation plot"){
-        # Extract the number of death for each death reasons
-        numeric_data <- region_data[,4:31]
-         
-        # Calculate the correlation for all variables
-        correlation <- cor(numeric_data)
-        
-        # Melt the correlation for visualization
-        correlation_melted <- melt(correlation)
-        
-        # Create the correlation heatmap
-        ggplot(correlation_melted, aes(x = Var1, y = Var2, fill = value)) +
-          geom_tile() +
-          scale_fill_gradient2(low = "blue", mid = "white", high = "red", midpoint = 0, limit = c(-1, 1), name = "Correlation") +
-          theme_minimal() +
-          theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
-          labs(title = "Correlation Plot of Death Reasons", x = "Variables", y = "Variables")
-      }
-    })
-    output$plot2 <- renderPlot({ 
-      if (input$compare == TRUE && input$plot_type == 'Line plot'){
-      region_data<-data[data$Entity==input$region2,]
-      # Plot all death reasons
-      ggplot(region_data, aes_string(x="Year", y=input$reason, group ="Entity")) + geom_line(color="darkolivegreen") + labs(x="Year", y = input$reason)
-    }
-  })
-}
-
-# Run the Shiny app
-shinyApp(ui = ui, server = server)
-```
 The data needs to be transformed, including divided the data into different groups, including countries, regions. Additionally, log-transformation will be applied for data transformation
 
 ## Data Transformation
@@ -289,7 +188,7 @@ label_total_countries_death
 
 
 
-##Building model
+#Building model
 - Explain what a null model would look like for classification
 - Find all categorical variables and numerical variables
 - Expand the dataset with columns built from single variable models
@@ -319,29 +218,31 @@ cat("Testing dataset size is", dim(test_data))
 # we separated the columns, including the responses and all features
 responses<- colnames(label_total_countries_death) %in% c("Entity", "Income.group", "Label")
 all_features<-colnames(label_total_countries_death)[!responses]
+all_features
 ```
 
-### Decision Trees
-Single-variate and Multi-Variate models
+## Best single variable and feature selections
+### Null model
+In the training dataset, the probability of high-income countries in the dataset is 
+```{r}
+null_model_prob<-sum(train_data$Label==1)/nrow(train_data)
+null_model_prob
+```
+The null model probability is 0.3223684. This means that there are there are around 32% of the countries in the training dataset is high-income countries. This implies that the model needs to perform better than this baseline value.
 
-#### Single-variate model
-
+### Best single-variable model
 We will loop through all of the numerical variable to create single variate models with the training data. Then the best single variate model will be selected
 
-Now we will run through all single numerical variables
+Now we will run through all single numerical variables and calculate the area under the curve values (AUCs)
 ```{r}
 mkPredC<-function(outCol, varCol, appCol){ #training outcomes, training variable and prediction variable
   outCol <- as.vector(outCol)
   varCol <- as.vector(varCol)
   appCol <- as.vector(appCol)
   pOne<-sum(outCol==1)/length(outCol) #how often the outcome is 1 during training
-  #print(is.na(varCol))
-  #naTab<-table(as.factor(outCol[is.na(varCol)])) 
-  #pOneWna<-(naTab/sum(naTab))[pos] #how often the outcome is positive for NA values
   vTab<-table(as.factor(outCol), varCol)
   pOneWv<-(vTab[1,]+ 1.0e-3 *pOne)/(colSums(vTab)+ 1.0e-3) #how often the outcome is 1 with conditioned on levels of training variable
   pred<-pOneWv[appCol] #make prediction by looking up levels of appCol
-  #pred[is.na(appCol)]<-pOneWna  #add prediction for NA levels of appCol
   pred[is.na(pred)]<-pOne #add prediction for appCol that were unknown when training
   pred
 }
@@ -358,7 +259,6 @@ mkPredN<- function(outCol, varCol, appCol){
 
 ```{r}
 library('ROCR')
-
 calcAUC <- function(predcol,outcol) {
   perf <- performance(prediction(predcol,outcol==1),'auc')
   as.numeric(perf@y.values)
@@ -371,15 +271,35 @@ for(var in all_features) {
   train_data[,pi] <- mkPredN(train_data[["Label"]], as.numeric(unlist(train_data[[var]])), as.numeric(unlist(train_data[[var]])))
   test_data[,pi] <- mkPredN(test_data[["Label"]], as.numeric(unlist(test_data[[var]])),as.numeric(unlist(test_data[[var]])))
   aucTrain <- calcAUC(train_data[,pi], train_data[,"Label"])
-  if(aucTrain >= 0.30) {
-    aucTest <- calcAUC(test_data[,pi], test_data[,"Label"])
-    print(sprintf("%s: trainAUC: %4.3f; testAUC: %4.3f",pi, aucTrain, aucTest))
-  }
+  aucTest <- calcAUC(test_data[,pi], test_data[,"Label"])
+  print(sprintf("%s: trainAUC: %4.3f; testAUC: %4.3f",pi, aucTrain, aucTest))
 }
 ```
-When calculating the area under the curve (AUC), it shows that the Secondhand.smoke variable has the highest AUC for training data, with value of 0.383. While looking at the AUC values for testing data, Smoking has the highest AUC with value of 0.318
+There are no variables having AUC higher than 0.5. This implies that there are no variables perform well in classifying the high-income countries with countries from other income groups. When calculating the area under the curve (AUC), it shows that the Secondhand.smoke variable has the highest AUC for training data, with value of 0.383. While looking at the AUC values for testing data, Smoking has the highest AUC with value of 0.318.
 
-The best single feature selection is based on the largest log likelihood value
+However, when try to predict whether a country is in non-high-income country group. The AUCs are so much higher on both training and testing data.
+```{r}
+library('ROCR')
+calcAUC <- function(predcol,outcol) {
+  perf <- performance(prediction(predcol,outcol==0),'auc')
+  as.numeric(perf@y.values)
+}
+```
+
+```{r}
+for(var in all_features) {
+  pi <- paste('pred', var, sep='')
+  train_data[,pi] <- mkPredN(train_data[["Label"]], as.numeric(unlist(train_data[[var]])), as.numeric(unlist(train_data[[var]])))
+  test_data[,pi] <- mkPredN(test_data[["Label"]], as.numeric(unlist(test_data[[var]])),as.numeric(unlist(test_data[[var]])))
+  aucTrain <- calcAUC(train_data[,pi], train_data[,"Label"])
+  aucTest <- calcAUC(test_data[,pi], test_data[,"Label"])
+  print(sprintf("%s: trainAUC: %4.3f; testAUC: %4.3f",pi, aucTrain, aucTest))
+}
+```
+Therefore, as the single variables are not good enough to predict the countries from high-income group based on death causes, we will use all the death cause variables for classification.
+
+### Feature selection
+The best feature is based on the largest log likelihood value
 ```{r}
 # Create a function to calculate the log likelihood
 logLikelihood<-function(ytrue, ypred, epsilon = 1e-15){
@@ -389,7 +309,7 @@ logLikelihood<-function(ytrue, ypred, epsilon = 1e-15){
 ```
 
 For the best single variable selection, we will calculate the log likelihood to select the best single variable to build the model.
-Firstly, we will calculate the Null model on the training dataset
+Firstly, we will calculate the null log likelihood on the training dataset
 ```{r}
 logNull<-logLikelihood(train_data[,"Label"], sum(train_data[,"Label"]==0)/nrow(train_data))
 cat(logNull)
@@ -398,34 +318,24 @@ cat(logNull)
 Now we will calculate the log likelihood for all variables
 ```{r}
 one_num_var<-c()
-minDrop<-100 # this is as a value to filter the data
+minDrop<-10 # this is as a value to filter the data
 for (var in all_features){
   pi<-paste("pred", var, sep='')
   
   devDrop<-2*(logLikelihood(test_data[,"Label"], test_data[[pi]])-logNull)
-  if (devDrop>=minDrop){
+  if (devDrop>=10){
     print(sprintf("%s, deviance reduction: %g", pi, devDrop))
-    one_num_var<-c(one_num_var, pi)
+    one_num_var<-c(one_num_var, var)
   }
 }
 ```
-Among all the vairables satisfied with the condition of log likelihood larger than 100, Smoking is the model with the highest value of 185.363, slightly above the Diet low in Vegitables of 184.449. Therefore, we will use smoking as a variable to build the decision tree classification model.
-
 ```{r}
-library(rpart)
-library(rpart.plot)
-decision_singlevar_model <- rpart(Label ~ ., data = train_data[, c("Smoking", "Label")], method = "class")
-rpart.plot(decision_singlevar_model)
+one_num_var
 ```
 
-```{r}
-print(calcAUC(predict(decision_singlevar_model, train_data)[,2], train_data[,"Label"]))
-```
+Among all the vairables satisfied with the condition of log likelihood larger than 10, there are 15 features are good to classify the countries from high-income group based on death causes. Smoking is the model with the highest value of 185.363, slightly above the Diet low in Vegitables of 184.449. Therefore, we will use smoking as a variable to build the decision tree classification model.
 
-```{r}
-print(calcAUC(predict(decision_singlevar_model, test_data)[,2], test_data[,"Label"]))
-```
-
+## Decision Tree Classification
 We will build a function to create the confusion matrix for both decision tree and logistic regression classifiers
 ```{r}
 performanceMeasures <- function(pred, truth, name = "model") {
@@ -465,73 +375,89 @@ pretty_perf_table <- function(model,training,test, feature, model_type) {
 }
 ```
 
+### Full model
 ```{r}
-pretty_perf_table(decision_singlevar_model, train_data, test_data, all_features, "decision_tree")
-```
-
-#### Multi-variate model
-```{r}
-decision_multivar_model <- rpart(Label==1 ~ ., data = train_data[, c(all_features, "Label")], method = "class",control = rpart.control(cp = 0.01))
-rpart.plot(decision_multivar_model)
-```
-
-```{r}
-print(calcAUC(predict(decision_multivar_model, train_data)[,2], train_data[,"Label"]))
+library(rpart)
+library(rpart.plot)
+decision_full_model <- rpart(Label ~ ., data = train_data[, c(all_features, "Label")], method = "class",control = rpart.control(cp = 0.01))
+rpart.plot(decision_full_model)
 ```
 
 ```{r}
-print(calcAUC(predict(decision_multivar_model, test_data)[,2], test_data[,"Label"]))
+#As we change the label of the previous part to 0, now we just change back to 1
+calcAUC <- function(predcol,outcol) {
+  perf <- performance(prediction(predcol,outcol==1),'auc')
+  as.numeric(perf@y.values)
+}
+```
+
+
+```{r}
+print(calcAUC(predict(decision_full_model, train_data)[,2], train_data[,"Label"]))
 ```
 
 ```{r}
-pretty_perf_table(decision_multivar_model, train_data, test_data, all_features, "decision_tree")
-```
-
-
-### Logistic Regression
-Null model, single variable and full model
-
-This is the Null model
-
-```{r}
-sum(train_data$Label==1)/nrow(train_data)
-```
-
-This is the single variable
-
-```{r}
-log_single_model<-glm(formula=Label~Smoking, data=train_data, family=binomial(link="logit"))
-train_data$log_single_pred <- predict(log_single_model, newdata=train_data, type="response")
-test_data$log_single_pred <- predict(log_single_model, newdata=test_data, type="response")
+print(calcAUC(predict(decision_full_model, test_data)[,2], test_data[,"Label"]))
 ```
 
 ```{r}
-pretty_perf_table(log_single_model, train_data, test_data, "Smoking", "logistic")
+pretty_perf_table(decision_full_model, train_data, test_data, all_features, "decision_tree")
+```
+
+### Selected variables
+
+```{r}
+decision_multi_var_model <- rpart(Label ~ ., data = train_data[, c(one_num_var, "Label")], method = "class")
+rpart.plot(decision_multi_var_model)
+```
+
+```{r}
+print(calcAUC(predict(decision_multi_var_model, train_data)[,2], train_data[,"Label"]))
+```
+
+```{r}
+print(calcAUC(predict(decision_multi_var_model, test_data)[,2], test_data[,"Label"]))
+```
+
+```{r}
+pretty_perf_table(decision_multi_var_model, train_data, test_data, all_features, "decision_tree")
+```
+## Logistic Regression
+### Full model
+```{r}
+formula<-paste("Label", paste(all_features, collapse=" + "), sep=" ~ ")
+log_full_model<-glm(formula=formula, data=train_data, family=binomial(link="logit"))
+train_data$log_full_pred <- predict(log_full_model, newdata=train_data, type="response")
+test_data$log_full_pred <- predict(log_full_model, newdata=test_data, type="response")
+```
+
+```{r}
+pretty_perf_table(log_full_model, train_data, test_data, all_features, "logistic")
 ```
 
 ```{r}
 library(knitr)
-kable(table(truth=test_data$Label, prediction=test_data$log_single_pred>0.322))
+kable(table(truth=test_data$Label, prediction=test_data$log_full_pred>0.5))
 ```
 
-For full model
+### Selected feature
 ```{r}
-formula<-paste("Label", paste(all_features, collapse=" + "), sep=" ~ ")
-log_multiple_model<-glm(formula=formula, data=train_data, family=binomial(link="logit"))
-train_data$log_multiple_pred <- predict(log_multiple_model, newdata=train_data, type="response")
-test_data$log_multiple_pred <- predict(log_multiple_model, newdata=test_data, type="response")
-```
-
-```{r}
-pretty_perf_table(log_multiple_model, train_data, test_data, all_features, "logistic")
+formula<-paste("Label", paste(one_num_var, collapse=" + "), sep=" ~ ")
+log_multi_var_model<-glm(formula=formula, data=train_data, family=binomial(link="logit"))
+train_data$log_multi_var_pred <- predict(log_multi_var_model, newdata=train_data, type="response")
+test_data$log_multi_var_pred <- predict(log_multi_var_model, newdata=test_data, type="response")
 ```
 
 ```{r}
-kable(table(truth=test_data$Label, prediction=test_data$log_multiple_pred>0.322))
+pretty_perf_table(log_multi_var_model, train_data, test_data, all_features, "logistic")
+```
+
+```{r}
+kable(table(truth=test_data$Label, prediction=test_data$log_multi_var_pred>0.5))
 ```
 
 ROC plot
-```{r, fig.asp=1}
+```{r}
 library(ROCit)
 
 # Function to plot ROC curves for both logistic regression and decision tree models
@@ -559,64 +485,315 @@ plot_roc <- function(predcol1_test, outcol1_test, predcol1_train, outcol1_train,
          legend = c("Logistic Test", "Decision Tree Test", "Null Model", "Logistic Train", "Decision Tree Train"),
          lwd = 2,lty = c(1, 1, 2, 2, 2))
 }
+```
 
+```{r, fig.asp=1}
 # Generate predictions for both models on test and training datasets
 # For Logistic Regression Model
-pred_log_test <- predict(log_multiple_model, newdata = test_data, type = "response")
-pred_log_train <- predict(log_multiple_model, newdata = train_data, type = "response")
+pred_log_full_test <- predict(log_full_model, newdata = test_data, type = "response")
+pred_log_full_train <- predict(log_full_model, newdata = train_data, type = "response")
 
 # For Decision Tree Model (using probability predictions)
-pred_tree_test <- predict(decision_multivar_model, newdata = test_data, type = "prob")[, 2]
-pred_tree_train <- predict(decision_multivar_model, newdata = train_data, type = "prob")[, 2]
+pred_tree_full_test <- predict(decision_full_model, newdata = test_data, type = "prob")[, 2]
+pred_tree_full_train <- predict(decision_full_model, newdata = train_data, type = "prob")[, 2]
 
 # Now call the plot function with the appropriate data
-plot_roc(pred_log_test, test_data$Label, pred_log_train, train_data$Label,
-         pred_tree_test, test_data$Label, pred_tree_train, train_data$Label)
+plot_roc(pred_log_full_test, test_data$Label, pred_log_full_train, train_data$Label,
+         pred_tree_full_test, test_data$Label, pred_tree_full_train, train_data$Label)
 
 ```
+```{r, fig.asp=1}
+# Generate predictions for both models on test and training datasets
+# For Logistic Regression Model
+pred_log_multi_test <- predict(log_multi_var_model, newdata = test_data, type = "response")
+pred_log_multi_train <- predict(log_multi_var_model, newdata = train_data, type = "response")
+
+# For Decision Tree Model (using probability predictions)
+pred_tree_multi_test <- predict(decision_multi_var_model, newdata = test_data, type = "prob")[, 2]
+pred_tree_multi_train <- predict(decision_multi_var_model, newdata = train_data, type = "prob")[, 2]
+
+# Now call the plot function with the appropriate data
+plot_roc(pred_log_multi_test, test_data$Label, pred_log_multi_train, train_data$Label,
+         pred_tree_multi_test, test_data$Label, pred_tree_multi_train, train_data$Label)
+
+```
+
+
 
 ### Clustering
 We will now working on clustering our data. For this one, the total_countries_death data will be used. However, the column Income.group will not be included in this dataset, as it works as a label for the data. Therefore, the dataset will only include country with total death records for each of the death cause.
+
 ```{r}
-label_total_countries_death<-label_total_countries_death[,-2] #Income.group is the second column
-label_total_countries_death<-label_total_countries_death[,-ncol(label_total_countries_death)] #Label is the last column
-label_total_countries_death
+regions
+```
+```{r}
+total_regions_death <- regions %>% group_by(Entity) %>% summarise(across(c("Outdoor.air.pollution": "Iron.deficiency"), sum))
+total_regions_death
 ```
 
 ```{r}
-all_variables<-colnames(label_total_countries_death)[-1] #except the country column
-scale_data<-scale(label_total_countries_death[,all_variables]) # this will be the data where each column has 0 mean and unit standard deviation
+cluster_data<-total_regions_death
 ```
 
 ```{r}
-scale_data
+cluster_data
+```
+
+
+```{r}
+#all_variables<-colnames(label_total_countries_death)[-1] #except the country column
+scale_data<-scale(cluster_data[, 2:ncol(cluster_data)]) # this will be the data where each column has 0 mean and unit standard deviation
 ```
 
 
 ```{r}
 attr(scale_data, "scaled:scale")
 ```
+
 ```{r}
 attr(scale_data, "scaled:center")
 ```
 
 ```{r}
-
+d<-dist(scale_data, method="euclidean")
+d
+```
+```{r}
+pfit<-hclust(d,method="ward.D2")
+plot(pfit, labels = cluster_data$Entity, main="Cluster Dendogram for Death Causes")
+rect.hclust(pfit, k=3)
+```
+```{r}
+plot(as.dendrogram(pfit), xlim=c(1, 25))
 ```
 
 
+```{r}
+groups <- cutree(pfit, k=3)
+groups
+```
+
+```{r}
+print(dim(project2D))  # Dimensions of project2D
+print(length(groups))  # Length of groups (should be the same as number of rows in project2D)
+print(length(cluster_data$Entity))  # Length of cluster_data$Country
+```
 
 
+```{r}
+princ <- prcomp(scale_data) # Calculate the principal components of scaled_df
+nComp <- 2
+project2D <- as.data.frame(predict(princ, newdata=scale_data)[,1:nComp])
+hclust.project2D <- cbind(project2D, cluster=as.factor(groups), country=cluster_data$Entity)
+head(hclust.project2D)
+```
+
+```{r}
+# finding convex hull
+library('grDevices')
+find_convex_hull <- function(proj2Ddf, groups) {
+  do.call(rbind,lapply(unique(groups), FUN = function(c) {
+    f <- subset(proj2Ddf, cluster==c);
+    f[chull(f),]
+    }))
+  }
+hclust.hull <- find_convex_hull(hclust.project2D, groups)
+```
 
 
+```{r}
+ggplot(hclust.project2D, aes(x=PC1, y=PC2)) +
+geom_point(aes(shape=cluster, color=cluster)) +
+geom_text(aes(label=country, color=cluster), hjust=0, vjust=1, size=3) +
+geom_polygon(data=hclust.hull, aes(group=cluster, fill=as.factor(cluster)),
+alpha=0.4, linetype=0) + theme(text=element_text(size=20))
+```
+```{r}
+# Function to return the squared Euclidean distance of two given points x and y
+sqr_euDist <- function(x, y) {
+  sum((x - y)**2)
+}
+# Function to calculate WSS of a cluster, represented as a n-by-d matrix
+# (where n and d are the numbers of rows and columns of the matrix)
+# which contains only points of the cluster.
+wss <- function(clustermat) {
+  c0 <- colMeans(clustermat)
+  sum(apply( clustermat, 1, FUN=function(row) {sqr_euDist(row, c0)} ))
+}
+# Function to calculate the total WSS. Argument `scaled_df`: data frame
+# with normalised numerical columns. Argument `labels`: vector containing
+# the cluster ID (starting at 1) for each row of the data frame.
+wss_total <- function(scaled_df, labels) {
+  wss.sum <- 0
+  k <- length(unique(labels))
+  for (i in 1:k)
+    wss.sum <- wss.sum + wss(subset(scaled_df, labels == i))
+    wss.sum
+}
+# Function to calculate total sum of squared (TSS) distance of data
+# points about the (global) mean. This is the same as WSS when the
+# number of clusters (k) is 1.
+tss <- function(scaled_df) {
+  wss(scaled_df)
+}
+```
+
+```{r}
+# Function to return the CH indices computed using hierarchical
+# clustering (function `hclust`) or k-means clustering (`kmeans`)
+# for a vector of k values ranging from 1 to kmax.
+CH_index <- function(scaled_df, kmax, method="kmeans") {
+  if (!(method %in% c("kmeans", "hclust")))
+    stop("method must be one of c('kmeans', 'hclust')")
+  
+  npts <- nrow(scaled_df)
+  wss.value <- numeric(kmax) # create a vector of numeric type
+  # wss.value[1] stores the WSS value for k=1 (when all the
+  # data points form 1 large cluster).
+  wss.value[1] <- wss(scaled_df)
+  
+  if (method == "kmeans") {
+    # kmeans
+    for (k in 2:kmax) {
+      clustering <- kmeans(scaled_df, k, nstart=10, iter.max=100)
+      wss.value[k] <- clustering$tot.withinss
+    }
+  } else {
+    # hclust
+    d <- dist(scaled_df, method="euclidean")
+    pfit <- hclust(d, method="ward.D2")
+    for (k in 2:kmax) {
+      labels <- cutree(pfit, k=k)
+      wss.value[k] <- wss_total(scaled_df, labels)
+    }
+  }
+  bss.value <- tss(scaled_df) - wss.value # this is a vector
+  B <- bss.value / (0:(kmax-1)) # also a vector
+  W <- wss.value / (npts - 1:kmax) # also a vector
+  data.frame(k = 1:kmax, CH_index = B/W, WSS = wss.value)
+}
+```
+
+```{r}
+library(gridExtra)
+# calculate the CH criterion
+crit.df <- CH_index(scale_data, 10, method="hclust")
+fig1 <- ggplot(crit.df, aes(x=k, y=CH_index)) +
+geom_point() + geom_line(colour="red") +
+scale_x_continuous(breaks=1:10, labels=1:10) +
+labs(y="CH index") + theme(text=element_text(size=20))
+fig2 <- ggplot(crit.df, aes(x=k, y=WSS), color="blue") +
+geom_point() + geom_line(colour="blue") +
+scale_x_continuous(breaks=1:10, labels=1:10) +
+theme(text=element_text(size=20))
+```
+
+```{r}
+grid.arrange(fig1, fig2, nrow=1)
+```
+NOTE: For the Shiny App, put all the ROC plots into it. Need to add all the plots and tables into the shiny app
 
 
+## Shiny App
+For data exploratory, it will be done using Shiny app
+
+```{r}
+# Define UI for application that draws different plot
+ui <- fluidPage(
+    titlePanel("Visualisation of death in country/region during 1990 - 2019"),
+    selectInput("plot_type", "Select plot type:", choices = c("Line plot", "Boxplot", "Heat map", "Correlation plot")),
+    sidebarLayout(
+        sidebarPanel(
+            conditionalPanel(
+              condition = "input.plot_type == 'Line plot'",
+              checkboxInput("compare", "Compare between 2 countries/regions", FALSE),
+            ),
+            selectInput("region1", "Choose the first country/region:", choices = unique(data$Entity)),
+            conditionalPanel(
+              condition = "input.compare == true",
+              selectInput("region2", "Choose the second country/region:", choices = unique(data$Entity))
+            ),
+            conditionalPanel(
+              condition = "input.plot_type == 'Line plot'",
+              selectInput("reason", "Choose death reason:", choices = names(data)[4:31])
+            ),
+        ),
+        mainPanel(            
+          plotOutput("plot1", width = "100%", height = "600px"),
+            conditionalPanel(
+                condition = "input.compare == true && input.plot_type == 'Line plot'",  # Display plot2 only if compare is checked
+                plotOutput("plot2", width = "100%", height = "600px"))
+        )
+    )
+)
 
 
+# Define the server
+server <- function(input, output){
+    # Render the histograms
+    output$plot1 <- renderPlot({
+      region_data<-data[data$Entity==input$region1,]
+      # Plot selected death reason
+      if (input$plot_type == 'Line plot'){
+      ggplot(region_data, aes_string(x="Year", y=input$reason, group = "Entity")) +
+          geom_line(color="darkorange") + 
+          labs(x="Year", y = input$reason) +
+          theme(axis.text.x = element_text(angle = 45, hjust = 1))}
+      # Plot the boxplot
+      else if (input$plot_type == 'Boxplot'){
+        data_melt <- melt(region_data, id.vars = "Year", measure.vars = names(data)[4:31], 
+                          variable.name = "death_reason", value.name = "value")
+        ggplot(data_melt, aes(x = death_reason, y = value, fill = death_reason)) +
+          geom_boxplot() +
+          labs(x = "Death Reason", y = "Number of Deaths", title = paste("Boxplot of Death Reasons in", input$region1)) +
+          theme_minimal() +
+          theme(axis.text.x = element_text(angle = 45, hjust = 1), legend.position = "top")+
+          guides(fill = guide_legend(ncol = 3))
+        }
+      
+      # Plot the Heat Map for selected country
+      else if (input$plot_type == 'Heat map'){
+        data_melt <- melt(region_data, id.vars = "Year", measure.vars = names(data)[4:31], variable.name = "death_reason", value.name = "value")
+        # Create heat map
+        ggplot(data_melt, aes(x = Year, y = death_reason, fill = value)) + 
+            geom_tile() + 
+            scale_fill_gradient(low = "aliceblue", high = "blue") +
+            scale_x_discrete(breaks = levels(region_data$Year)) +
+            labs(x = "Year", y = "Death Reason", title = paste("Heat Map of Death Reasons in", input$region1)) +
+            theme_minimal() +
+            theme(axis.text.x = element_text(angle = 45, hjust = 1))
+      }
+      else if (input$plot_type == "Correlation plot"){
+        # Extract the number of death for each death reasons
+        numeric_data <- region_data[,4:31]
+         
+        # Calculate the correlation for all variables
+        correlation <- cor(numeric_data)
+        
+        # Melt the correlation for visualization
+        correlation_melted <- melt(correlation)
+        
+        # Create the correlation heatmap
+        ggplot(correlation_melted, aes(x = Var1, y = Var2, fill = value)) +
+          geom_tile() +
+          scale_fill_gradient2(low = "blue", mid = "white", high = "red", midpoint = 0, limit = c(-1, 1), name = "Correlation") +
+          theme_minimal() +
+          theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+          labs(title = "Correlation Plot of Death Reasons", x = "Variables", y = "Variables")
+      }
+    })
+    output$plot2 <- renderPlot({ 
+      if (input$compare == TRUE && input$plot_type == 'Line plot'){
+      region_data<-data[data$Entity==input$region2,]
+      # Plot all death reasons
+      ggplot(region_data, aes_string(x="Year", y=input$reason, group ="Entity")) + geom_line(color="darkolivegreen") + labs(x="Year", y = input$reason)
+    }
+  })
+}
 
-
-
-
+# Run the Shiny app
+shinyApp(ui = ui, server = server)
+```
 
 
 
