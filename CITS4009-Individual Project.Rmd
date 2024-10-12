@@ -18,6 +18,7 @@ library(reshape2)
 library(readxl)
 library(dplyr)
 ```
+# Introduction
 In the world every year, there are different numbers of death recorded because of various reasons. Depends on the countries and regions, the numbers of death in each death reasons could be unique. For example, there are higher numbers of death recorded in high-income countries due to smoking, compared to low-income countries with higher numbers of death because of starving. In this report, the Country and Death causes dataset from World Health Organisation recorded from 1990 to 2019 is used for data exploration and modelling to investigate the death causes in different countries and how they will be utilised for making binary classifiers, clustering.
 
 We need to load the data for this task
@@ -123,13 +124,13 @@ path<-"/Users/henrytran/Documents/UWA_Master-Data-Science/CITS4009/Project/"
 #create a path that can access and extractn the data
 country_groups_file<- paste0(path, "World Bank Country Groups.xlsx")
 country_groups_dataset<-read_excel(country_groups_file, sheet = "List of economies")
-country_groups_dataset
+head(country_groups_dataset)
 ```
 The data that we need will include the the Economy, Code and Income group. Therefore, we will keep only 3 columns for this dataset
 
 ```{r}
 country_groups_dataset<-country_groups_dataset[,c(1,2,4)] #We need the first 3 columns - Economy, Code, Region
-country_groups_dataset
+head(country_groups_dataset)
 ```
 Now, we will merge countries dataset with country groups dataset using Code as key, and we keep all the data on the countries dataset
 ```{r}
@@ -156,14 +157,14 @@ Now we will calculate the total death of each country for all death causes.
 #we keep the remaining countries
 countries_merged<-merge(countries, country_groups_dataset, by.x="Code", by.y="Code")
 countries_merged<-countries_merged[,-32]
-countries_merged
+head(countries_merged)
 ```
 ```{r}
 #for the data, group the data into entity and income groups, then calculate the total death of each death causes of each country
 names(countries_merged)[names(countries_merged) == "Income group"] <- "Income.group"
 #using binning technique to calculate the sum of all death causes
 total_countries_death <- countries_merged %>% group_by(Entity, Income.group) %>% summarise(across(c("Outdoor.air.pollution": "Iron.deficiency"), sum))
-total_countries_death
+head(total_countries_death)
 ```
 
 After aggregating the model, now we will create a label for each country, in a column called 'Label'. As mentioned previously, the countries with high income will be 1 and 0 for countries in other income groups. Label will be the last column in this dataset
@@ -185,7 +186,7 @@ label_total_countries_death <- na.omit(label_total_countries_death)
 ```
 
 ```{r}
-label_total_countries_death
+head(label_total_countries_death)
 ```
 There are 200 countries, and 86 of the countries are in high-income group. Therefore, the ratio between number of countries in high and non-high incomes groups are close to equal.
 
@@ -492,6 +493,7 @@ Suprisingly, the logistic regression for 15-selected variables, the percision, f
 ```{r}
 kable(table(truth=test_data$Label, prediction=test_data$log_multi_var_pred>0.5))
 ```
+
 When we do the confusion matrix for the testing dataset, the model predict correctly 17 countries in high-income group, while 4 wrong. However, the model did much better in classifying the countries from non-high income groups, there are 22 values predicted correctly and only 5 were incorrectly predicted to high-income country group. In overall, the selected-features logistic regression classification model performes better than the full variables one.
 
 #### Additional ROC plots
@@ -534,6 +536,7 @@ pred_tree_full_train <- predict(decision_full_model, newdata = train_data, type 
 plot_roc(pred_log_full_test, test_data$Label, pred_log_full_train, train_data$Label, pred_tree_full_test, test_data$Label, pred_tree_full_train, train_data$Label)
 
 ```
+
 In the ROC plot for all features models, both the models perform better than the Null model. The decsion tree classifier's training and testing lines are closer to top left corner, in comparision to logistic regression classifier. Therefore, decsion tree classifier with full variables are better classifier. 
 
 We will do the same thing with 2 models with selected features.
@@ -549,7 +552,8 @@ pred_tree_multi_train <- predict(decision_multi_var_model, newdata = train_data,
 plot_roc(pred_log_multi_test, test_data$Label, pred_log_multi_train, train_data$Label, pred_tree_multi_test, test_data$Label, pred_tree_multi_train, train_data$Label)
 
 ```
-In the ROC plot for 15-selected features models, both models perform better than the Null model. The logistic regression classifier's training and testing lines are not a curve line, they are stepped. This could implies that the model is currently being overfitted or the dataset we are having is too small. Therefore, decsion tree classifier with 15-selected variables are better classifier. 
+
+In the ROC plot for 15-selected features models, both models perform better than the Null model. The logistic regression classifier's training and testing lines are not a curve line, they are stepped. This could implies that the model is currently being overfitted or the dataset we are having is too small. Therefore, decision tree classifier with 15-selected variables are better classifier. 
 
 # Clustering
 We will now working on clustering our data. For this one, the regions total death will be used. However, the column Income.group will not be included in this dataset, as it works as a label for the data. Therefore, the dataset will only include regions with total death records for each of the death cause.
@@ -557,11 +561,11 @@ We will now working on clustering our data. For this one, the regions total deat
 First of all, we have to transform the data.
 
 ```{r}
-regions
+head(regions)
 ```
 ```{r}
 total_regions_death <- regions %>% group_by(Entity) %>% summarise(across(c("Outdoor.air.pollution": "Iron.deficiency"), sum))
-total_regions_death
+head(total_regions_death)
 ```
 
 ```{r}
@@ -569,7 +573,7 @@ cluster_data<-total_regions_death
 ```
 
 ```{r}
-cluster_data
+head(cluster_data)
 ```
 We need to scale the data, with mean of 0 and standard deviation of 1 
 
@@ -595,6 +599,12 @@ par(cex=0.5, mar=c(5, 5, 5, 5)) #we adjust the size of dendogram to be bigger an
 plot(pfit, labels = cluster_data$Entity, main="Cluster Dendogram for Death Causes") #we perform a hierarchial clustering
 rect.hclust(pfit, k=3) #we will divide into 3 groups
 ```
+
+With the optimal k is 3, all the data points were divided into 3 groups: 
+- World and G20
+- Low-income, African, South and South-East Asian countries
+- High income countries and other regions which seems to be developed countries.
+
 ```{r}
 plot(as.dendrogram(pfit), xlim=c(1, 25))
 ```
@@ -634,6 +644,7 @@ hclust.hull <- find_convex_hull(hclust.project2D, groups)
 #this is the code from lecture
 ggplot(hclust.project2D, aes(x=PC1, y=PC2)) + geom_point(aes(shape=cluster, color=cluster)) + geom_text(aes(label=country, color=cluster), hjust=0, vjust=1, size=3) + geom_polygon(data=hclust.hull, aes(group=cluster, fill=as.factor(cluster)),alpha=0.4, linetype=0) + theme(text=element_text(size=20))
 ```
+
 We can see that the data are divided into 3 groups, similar to the dendogram that we have above. 
 
 We do not know which is the optimal number of k to divide the data into k groups. Therefore, we will find the number of cluster k.
@@ -696,15 +707,20 @@ ggplot(crit.df, aes(x=k, y=WSS), color="blue") + geom_point() + geom_line(colour
 When we look for the first 10 k values and the values for WSS, k equals to 2 is the best numbers of clusters.
 
 ## Shiny App
-For data exploratory, it will be done using Shiny app
-This will be removed
+For every graphs coverd in this report, it will all be put in this Shiny app. This Shiny app includes:
+- Exploratory Data Analysis
+- Decision Tree Classification Modelling
+- Logistic Regression Classification Modelling
+- ROC plots to evaluate AUC
+- Clustering
 
 ```{r}
 logistic_model <- NULL
 decision_model <- NULL
 # Define UI for application that draws different plot
 ui <- navbarPage(
-    titlePanel("Visualisation of death in country/region during 1990 - 2019"),
+    "Analysis of number of recorded deaths and causes in countries/regions during 1990 - 2019",
+  #Tab1: EDA
     tabPanel("EDA",
     sidebarLayout(
         sidebarPanel(
@@ -731,7 +747,7 @@ ui <- navbarPage(
         )
     )
 ),
-# Tab 2: Decision Tree Classification Model
+#Tab2: Decision Tree Classification Model
   tabPanel("Decision Tree Classification Model",
     sidebarLayout(
       sidebarPanel(
@@ -744,7 +760,7 @@ ui <- navbarPage(
       )
     )
   ),
-# Tab 3: Logistic Regression Model
+#Tab3: Logistic Regression Model
   tabPanel("Logistic Regression Classification Model",
     sidebarLayout(
       sidebarPanel(
@@ -756,7 +772,7 @@ ui <- navbarPage(
       )
     )
   ),
-# Tab 4: Plot ROC
+#Tab4: Plot ROC
   tabPanel("Plots to compare AUC",
     sidebarLayout(
       sidebarPanel(
@@ -767,7 +783,7 @@ ui <- navbarPage(
       )
     )
   ),
-# Tab 5: Clustering
+#Tab5: Clustering
   tabPanel("Clustering",
     sidebarLayout(
       sidebarPanel(
@@ -905,7 +921,7 @@ server <- function(input, output){
       plot_roc(pred_log_test, test_data$Label, pred_log_train, train_data$Label, pred_tree_test, test_data$Label, pred_tree_train, train_data$Label)
     }
 })
-  #clustering
+  #Clustering
   output$clustering_plot <- renderPlot({
     clustering_plot_type <- input$clustering_plot_type
     d<-dist(scale_data, method="euclidean")
@@ -938,10 +954,16 @@ shinyApp(ui = ui, server = server)
 ```
 
 
+# Conclusion
+To sum up everything, we have done the analysis of Countries' numbers of death and causes during 1990-2019 with the dataset provided by World Bank.
 
+With the exploratary data analysis, we found out that the dataset includes numbers of death not only in different countries, but also in different groups, regions and the World, which makes the death causes got the numbers recorded vary in large range. Therefore we need to separate the dataset in to countries and regions. 
 
+With the classification modelling, the countries dataset was used to predict whether a country is a high income countries based on different causes. There were 2 types of models were performed with full variables and high quality selected-features, they are decision tree and logistic regression. All the total number of deaths over the period were calculated, and the high-countries label were marked. With the decision tree classification models, the full model performed better than the selected-features model, while compared to logistic regression modelling, the model with selected features performed better than the full model since the full model seems to be overfitted or not enough data for training and testing. While we compared the same numbers of features with 2 types of models, the decision tree classification models predicted better than the logistics regression model. To compare the performance between models, the perfect table including accuracy, precision, f1, recall values, along with ROC plot to compare the AUC were done.
 
+With the clustering, the regions dataset was selected for this task. With the optimal k is 3, all the data points were divided into 3 groups: the first group of World and G20, the second group of countries with low-income, African countries, South and South-East Asia, and the third group of high income countries and other regions.
 
+There are some improvement needed for this project. The main one is how to improve the model to predict better with higher chance of classifying correctly. Along with that, as the data are vary in a large range, the log-transformation could be performed to evaluate the models performance.
 
 
 
