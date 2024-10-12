@@ -740,6 +740,20 @@ ui <- navbarPage(
       mainPanel(
         plotOutput("decision_tree", width = "100%", height = "400px"),
         tableOutput("decision_tree_perf_table")
+        
+      )
+    )
+  ),
+# Tab 3: Logistic Regression Model
+  tabPanel("Logistic Regression Classification Model",
+    sidebarLayout(
+      sidebarPanel(
+        radioButtons("tree_variable_set", "Select variable set:", choices = c("all_features", "selected_features"))
+      ),
+      mainPanel(
+        plotOutput("decision_tree", width = "100%", height = "400px"),
+        tableOutput("decision_tree_perf_table")
+        
       )
     )
   ),
@@ -817,6 +831,17 @@ server <- function(input, output){
     }
     rpart.plot(decision_model)
   })
+  output$decision_tree_perf_table <- renderTable({
+  # Get predictions from the decision tree model
+    variable_set <- input$tree_variable_set
+    if (variable_set == "all_features") {
+      decision_model <- rpart(Label ~ ., data = train_data[, c(all_features, "Label")], method = "class",control = rpart.control(cp = 0.01))
+    } else {
+      decision_model <- rpart(Label ~ ., data = train_data[, c(selected_features, "Label")], method = "class")
+    }
+    table<-pretty_perf_table(decision_model, train_data, test_data, all_features, "decision_tree")
+    table
+})
 }
 
 # Run the Shiny app
