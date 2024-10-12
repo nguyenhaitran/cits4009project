@@ -220,24 +220,28 @@ all_features
 
 ### Best single variable and feature selections
 #### Null model
-In the training dataset, the probability of high-income countries in the dataset is 
+In the training dataset, the probability of high-income countries in the dataset is around 0.322
 ```{r}
 null_model_prob<-sum(train_data$Label==1)/nrow(train_data)
 null_model_prob
 ```
-The null model probability is 0.3223684. This means that there are there are around 32% of the countries in the training dataset is high-income countries. This implies that the model needs to perform better than this baseline value.
+The null model probability is 0.3223684. This means that there are there are around 32% of the countries in the training dataset is high-income countries. This implies that when we do the performance comparision, any model that we build needs to perform better than this baseline value.
 
-### Best single-variable model
+#### Best single-variable model
+Another way to check if our models' performance is to compare with best single-variate model. 
+
 We will loop through all of the numerical variable to create single variate models with the training data. Then the best single variate model will be selected
 
 Now we will run through all single numerical variables and calculate the area under the curve values (AUCs)
 ```{r}
+#this is the code followed from the lecture, with some modification
 mkPredC<-function(outCol, varCol, appCol){ #training outcomes, training variable and prediction variable
-  outCol <- as.vector(outCol)
+  #we convert all the data to vector for easier calculation
+  outCol <- as.vector(outCol) 
   varCol <- as.vector(varCol)
   appCol <- as.vector(appCol)
-  pOne<-sum(outCol==1)/length(outCol) #how often the outcome is 1 during training
-  vTab<-table(as.factor(outCol), varCol)
+  pOne<-sum(outCol==1)/length(outCol) #the probability of the outcome is 1 during training
+  vTab<-table(outCol, varCol) #the table of training outcomes and training variable
   pOneWv<-(vTab[1,]+ 1.0e-3 *pOne)/(colSums(vTab)+ 1.0e-3) #how often the outcome is 1 with conditioned on levels of training variable
   pred<-pOneWv[appCol] #make prediction by looking up levels of appCol
   pred[is.na(pred)]<-pOne #add prediction for appCol that were unknown when training
@@ -245,28 +249,33 @@ mkPredC<-function(outCol, varCol, appCol){ #training outcomes, training variable
 }
 
 mkPredN<- function(outCol, varCol, appCol){
-  varCol <- as.numeric(varCol)  # Ensure it's numeric
-  appCol <- as.numeric(appCol)  # Ensure it's numeric
-  cuts<-unique(quantile(varCol, probs = seq(0,1,0.1), na.rm=T))
-  varC<-cut(varCol, cuts)
-  appC<-cut(appCol, cuts)
+  varCol <- as.numeric(varCol)  #we convert all the data to numerical to use for quantile function
+  appCol <- as.numeric(appCol)  #we convert all the data to numerical to use for quantile function
+  cuts<-unique(quantile(varCol, probs = seq(0,1,0.1), na.rm=T)) #we convert the numerical data to groups of categorical data
+  varC<-cut(varCol, cuts) #we applied the cuts to the training variables
+  appC<-cut(appCol, cuts) #we applied the cuts to the testing variable
   mkPredC(outCol, varC, appC)
 }
 ```
 
 ```{r}
+#this is the code followed from the lecture, with some modification
+#import the ROCR library to create calcAUC function used for calculating single-variate model's AUCs 
 library('ROCR')
 calcAUC <- function(predcol,outcol) {
-  perf <- performance(prediction(predcol,outcol==1),'auc')
+  perf <- performance(prediction(predcol,outcol==1),'auc') #we are checking the performance of model predicting the value 1
   as.numeric(perf@y.values)
 }
 ```
 
 ```{r}
+#this is the code followed from the lecture, with some modification
 for(var in all_features) {
-  pi <- paste('pred', var, sep='')
+  pi <- paste('pred', var, sep='')#create the predFeatures columns for each Features
+  #we ensure the input is vector for Label, numeric for all features
   train_data[,pi] <- mkPredN(train_data[["Label"]], as.numeric(unlist(train_data[[var]])), as.numeric(unlist(train_data[[var]])))
   test_data[,pi] <- mkPredN(test_data[["Label"]], as.numeric(unlist(test_data[[var]])),as.numeric(unlist(test_data[[var]])))
+  #calculate the AUCs values of single-variate model with training and testing dataset
   aucTrain <- calcAUC(train_data[,pi], train_data[,"Label"])
   aucTest <- calcAUC(test_data[,pi], test_data[,"Label"])
   print(sprintf("%s: trainAUC: %4.3f; testAUC: %4.3f",pi, aucTrain, aucTest))
@@ -276,7 +285,7 @@ There are no variables having AUC higher than 0.5. This implies that there are n
 
 However, when try to predict whether a country is in non-high-income country group. The AUCs are so much higher on both training and testing data.
 ```{r}
-library('ROCR')
+#for this code, we are checking the performance of model predicting the value 0
 calcAUC <- function(predcol,outcol) {
   perf <- performance(prediction(predcol,outcol==0),'auc')
   as.numeric(perf@y.values)
@@ -284,24 +293,28 @@ calcAUC <- function(predcol,outcol) {
 ```
 
 ```{r}
+#this is the code followed from the lecture, with some modification
 for(var in all_features) {
-  pi <- paste('pred', var, sep='')
+  pi <- paste('pred', var, sep='') #create the predFeatures columns for each Features
+  #we ensure the input is vector for Label, numeric for all features
   train_data[,pi] <- mkPredN(train_data[["Label"]], as.numeric(unlist(train_data[[var]])), as.numeric(unlist(train_data[[var]])))
   test_data[,pi] <- mkPredN(test_data[["Label"]], as.numeric(unlist(test_data[[var]])),as.numeric(unlist(test_data[[var]])))
+  #calculate the AUCs values of single-variate model with training and testing dataset
   aucTrain <- calcAUC(train_data[,pi], train_data[,"Label"])
   aucTest <- calcAUC(test_data[,pi], test_data[,"Label"])
   print(sprintf("%s: trainAUC: %4.3f; testAUC: %4.3f",pi, aucTrain, aucTest))
 }
 ```
-Therefore, as the single variables are not good enough to predict the countries from high-income group based on death causes, we will use all the death cause variables for classification.
+Therefore, as the single variables are not good enough to predict the countries from high-income group based on death causes, we will use all the death cause variables for classification to see if we will have AUCs value better than 0.5
 
 ### Feature selection
-The best feature is based on the largest log likelihood value
+The best feature is based on the largest log likelihood value compared
 ```{r}
+#this is the code followed from the lecture, with some modification
 # Create a function to calculate the log likelihood
 logLikelihood<-function(ytrue, ypred, epsilon = 1e-15){
   ypred <- pmin(pmax(ypred, epsilon), 1 - epsilon)
-  sum(ifelse(ytrue==1, log(ypred+epsilon), log(1-ypred-epsilon)), na.rm=T)
+  sum(ifelse(ytrue==1, log(ypred+epsilon), log(1-ypred-epsilon)), na.rm=T) #this is the formula to calculate the log-likelihood value
 }
 ```
 
@@ -314,11 +327,11 @@ cat(logNull)
 
 Now we will calculate the log likelihood for all variables
 ```{r}
+#this is the code followed from the lecture, with some modification
 one_num_var<-c()
-minDrop<-10 # this is as a value to filter the data
+minDrop<-10 # this is as a value to filter the data 
 for (var in all_features){
-  pi<-paste("pred", var, sep='')
-  
+  pi<-paste("pred", var, sep='') #create the predFeatures columns for each Features
   devDrop<-2*(logLikelihood(test_data[,"Label"], test_data[[pi]])-logNull)
   if (devDrop>=10){
     print(sprintf("%s, deviance reduction: %g", pi, devDrop))
@@ -329,19 +342,34 @@ for (var in all_features){
 ```{r}
 one_num_var
 ```
+Among all the vairables satisfied with the condition of log likelihood larger than 10, there are 15 features are good to classify the countries from high-income group based on death causes. They are:
+- Outdoor.air.pollution   
+- High.systolic.blood.pressure
+- Diet.high.in.sodium
+- Diet.low.in.whole.grains
+- Alochol.use
+- Diet.low.in.fruits
+- Secondhand.smoke
+- Unsafe.sex
+- Diet.low.in.Vegetables
+- Low.physical.activity
+- Smoking
+- High.fasting.plasma.glucose
+- High.body.mass.index
+- Drug.use
+- Low.bone.mineral.density
+Smoking is the model with the highest value of 185.363, slightly above the Diet low in Vegitables of 184.449. Therefore, we will use smoking as a single-variate model and use all 15 good classify features to build the decision tree classification model.
 
-Among all the vairables satisfied with the condition of log likelihood larger than 10, there are 15 features are good to classify the countries from high-income group based on death causes. Smoking is the model with the highest value of 185.363, slightly above the Diet low in Vegitables of 184.449. Therefore, we will use smoking as a variable to build the decision tree classification model.
-
-## Decision Tree Classification
-We will build a function to create the confusion matrix for both decision tree and logistic regression classifiers
+Before we continue, we will build a function to create the confusion matrix for both decision tree and logistic regression classifiers
 ```{r}
+#this is the code followed from the lecture, with some modification
 performanceMeasures <- function(pred, truth, name = "model") {
   # Construct confusion matrix ensuring all levels (0 and 1) are present
   ctable <- table(factor(truth, levels = c(0, 1)), factor(pred > 0.5, levels = c(FALSE, TRUE)))
-  accuracy <- sum(diag(ctable)) / sum(ctable)
-  precision <- ifelse(sum(ctable[, 2]) == 0, 0, ctable[2, 2] / sum(ctable[, 2]))  # Prevent division by 0
-  recall <- ifelse(sum(ctable[2, ]) == 0, 0, ctable[2, 2] / sum(ctable[2, ]))  # Prevent division by 0
-  f1 <- ifelse(precision + recall == 0, 0, 2 * precision * recall / (precision + recall))  # Handle case where both are 0
+  accuracy <- sum(diag(ctable)) / sum(ctable) #(TP+TN)/(TP+FP+TN+FN)
+  precision <- ifelse(sum(ctable[, 2]) == 0, 0, ctable[2, 2] / sum(ctable[, 2])) #we prevent the division with 0, (TP)/(TP+FP)
+  recall <- ifelse(sum(ctable[2, ]) == 0, 0, ctable[2, 2] / sum(ctable[2, ]) #we prevent the division with 0, (TP)/(TP+FN)
+  f1 <- ifelse(precision + recall == 0, 0, 2 * precision * recall / (precision + recall)) #we prevent the division with 0, (2*precision*recall)/(precision+recall)
   data.frame(model = name, precision = precision, recall = recall, f1 = f1, accuracy = accuracy)
 }
 
@@ -354,12 +382,11 @@ pretty_perf_table <- function(model,training,test, feature, model_type) {
   perf_justify <- "lrrrr"
   # comparing performance on training vs. test
   if (model_type == "logistic") {
-    pred_train <- predict(model, newdata=training[, feature], type="response")
+    pred_train <- predict(model, newdata=training[, feature], type="response") #for logistic regression, we need to set predict type to "response"
     pred_test <- predict(model, newdata=test[, feature], type="response")
   } else if (model_type == "decision_tree") {
-    # For decision trees, we use the 'type="prob"' to get the probabilities
-    pred_train <- predict(model, newdata=training[, feature], type="prob")[, 2]  # second column for class 1
-    pred_test <- predict(model, newdata=test[, feature], type="prob")[, 2]  # second column for class 1
+    pred_train <- predict(model, newdata=training[, feature], type="prob")[, 2]  # for logistic regression, we need to set predict type to "prob", and take the second column, as the result
+    pred_test <- predict(model, newdata=test[, feature], type="prob")[, 2]
   }
   truth_train <- training[["Label"]]
   truth_test <- test[["Label"]]
@@ -372,6 +399,8 @@ pretty_perf_table <- function(model,training,test, feature, model_type) {
 }
 ```
 
+## Decision Tree Classification
+We will build the decision tree classification, with all the features
 ### Full model
 ```{r}
 library(rpart)
@@ -388,7 +417,6 @@ calcAUC <- function(predcol,outcol) {
 }
 ```
 
-
 ```{r}
 print(calcAUC(predict(decision_full_model, train_data)[,2], train_data[,"Label"]))
 ```
@@ -396,13 +424,15 @@ print(calcAUC(predict(decision_full_model, train_data)[,2], train_data[,"Label"]
 ```{r}
 print(calcAUC(predict(decision_full_model, test_data)[,2], test_data[,"Label"]))
 ```
+With full features, the decision tree classifiers perform much better than the single-variate model, with training AUC value of 0.928 andb AUC testing value of 0.872
 
 ```{r}
 pretty_perf_table(decision_full_model, train_data, test_data, all_features, "decision_tree")
 ```
+The model also so really good results for percision, recall, f1 and accurarcy
 
 ### Selected variables
-
+As mentioned, there are 15 good classifier that we can use to classify the countries in high or non-high income groups. Therefore, we will use them to make the decision tree model.
 ```{r}
 decision_multi_var_model <- rpart(Label ~ ., data = train_data[, c(one_num_var, "Label")], method = "class")
 rpart.plot(decision_multi_var_model)
@@ -415,11 +445,16 @@ print(calcAUC(predict(decision_multi_var_model, train_data)[,2], train_data[,"La
 ```{r}
 print(calcAUC(predict(decision_multi_var_model, test_data)[,2], test_data[,"Label"]))
 ```
-
+With selected features, the decision tree classifiers perform closely to the full variables decision tree classifier better, around 0.01 different in AUC value. But with AUC testing value of 0.633, it is significantly lower thanfull variables decision tree classifier model's AUC of around 0.24. 
 ```{r}
 pretty_perf_table(decision_multi_var_model, train_data, test_data, all_features, "decision_tree")
 ```
+Based on the results of percision, recall, f1 and accurarcy, the selected variable decision tree classifier model did not performas good as the full variable model.
+
+In short, based on AUC values, percision, recall, f1 and accurarcy calculated for 2 decision tree classifiers that we build, the model with all variables performs better than the 15-features-selected model. 
+
 ## Logistic Regression
+We will build the logistic regression classification model, with all the features
 ### Full model
 ```{r}
 formula<-paste("Label", paste(all_features, collapse=" + "), sep=" ~ ")
@@ -431,13 +466,16 @@ test_data$log_full_pred <- predict(log_full_model, newdata=test_data, type="resp
 ```{r}
 pretty_perf_table(log_full_model, train_data, test_data, all_features, "logistic")
 ```
+With the logistic regression for all variables, the percision value is only around 0.55 to 0.61 for precision, implies that the model is still around randomly guessing the values. F1 and accurarcy values are around 0.71 to 0.74 when training and testing, which are good. Recall value is really high, with maximum for training and 0.9 for testing
 
 ```{r}
 library(knitr)
 kable(table(truth=test_data$Label, prediction=test_data$log_full_pred>0.5))
 ```
+When we do the confusion matrix for the testing dataset, the model predict correctly 19 countries in high-income group, while only 2 wrong. However, the model did not well classify the countries from non-high income groups, there are 12 values predicted wrong to high-income country group. The investigation of the model will be demonstrate later.
 
 ### Selected feature
+We will build the logistic regression classification model, with 15 selected features
 ```{r}
 formula<-paste("Label", paste(one_num_var, collapse=" + "), sep=" ~ ")
 log_multi_var_model<-glm(formula=formula, data=train_data, family=binomial(link="logit"))
@@ -448,36 +486,35 @@ test_data$log_multi_var_pred <- predict(log_multi_var_model, newdata=test_data, 
 ```{r}
 pretty_perf_table(log_multi_var_model, train_data, test_data, all_features, "logistic")
 ```
+Suprisingly, the logistic regression for 15-selected variables, the percision, f1 and accurarcy values are larger when comparing to the ones of full variable model in both training and testing, which are really good. However, recall value is smaller than full-feature classifier's recall, but still it signify a good classification model.
 
 ```{r}
 kable(table(truth=test_data$Label, prediction=test_data$log_multi_var_pred>0.5))
 ```
+When we do the confusion matrix for the testing dataset, the model predict correctly 17 countries in high-income group, while 4 wrong. However, the model did much better in classifying the countries from non-high income groups, there are 22 values predicted correctly and only 5 were incorrectly predicted to high-income country group. In overall, the selected-features logistic regression classification model performes better than the full variables one.
 
-ROC plot
+#### Additional ROC plots
+With the ROC plots, we will compare how 2 models perform with the same set of features
+
+We will start with 2 models with full features.
 ```{r}
+#this is the code followed from the lecture, with some modification
 library(ROCit)
-
 # Function to plot ROC curves for both logistic regression and decision tree models
 plot_roc <- function(predcol1_test, outcol1_test, predcol1_train, outcol1_train, 
                      predcol2_test, outcol2_test, predcol2_train, outcol2_train) {
-  
-  # ROC for the first model (Logistic Regression)
+  #we calcualte the ROC for the first model, which is the logistic regression model
   roc_1_test <- rocit(score = predcol1_test, class = outcol1_test == 1)
   roc_1_train <- rocit(score = predcol1_train, class = outcol1_train == 1)
-  
-  # ROC for the second model (Decision Tree)
+  #we calcualte the ROC for the first model, which is the decision tree model
   roc_2_test <- rocit(score = predcol2_test, class = outcol2_test == 1)
   roc_2_train <- rocit(score = predcol2_train, class = outcol2_train == 1)
-  
   # Plot test data for both models
   plot(roc_1_test, col = c("blue", "green"), lwd = 2, legend = FALSE, YIndex = FALSE, values = TRUE, asp = 1)
   lines(roc_2_test$TPR ~ roc_2_test$FPR, col = c("red", "green"), lwd = 2)
-  
-  # Plot training data as dashed lines
   lines(roc_1_train$TPR ~ roc_1_train$FPR, col = c("blue", "green"), lwd = 2, lty = 2)
   lines(roc_2_train$TPR ~ roc_2_train$FPR, col = c("red","green"), lwd = 2, lty = 2)
-  
-  # Add a legend
+  #we add the legend to classify the training and testing lines for each model
   legend("bottomright", col = c("blue", "red","green"), 
          legend = c("Logistic Test", "Decision Tree Test", "Null Model", "Logistic Train", "Decision Tree Train"),
          lwd = 2,lty = c(1, 1, 2, 2, 2))
@@ -485,40 +522,38 @@ plot_roc <- function(predcol1_test, outcol1_test, predcol1_train, outcol1_train,
 ```
 
 ```{r, fig.asp=1}
-# Generate predictions for both models on test and training datasets
-# For Logistic Regression Model
+#we generate predictions for both full-variables models on test and training datasets
+#logistic regression model (using response)
 pred_log_full_test <- predict(log_full_model, newdata = test_data, type = "response")
 pred_log_full_train <- predict(log_full_model, newdata = train_data, type = "response")
-
-# For Decision Tree Model (using probability predictions)
+#decision tree model (using probability)
 pred_tree_full_test <- predict(decision_full_model, newdata = test_data, type = "prob")[, 2]
 pred_tree_full_train <- predict(decision_full_model, newdata = train_data, type = "prob")[, 2]
 
-# Now call the plot function with the appropriate data
-plot_roc(pred_log_full_test, test_data$Label, pred_log_full_train, train_data$Label,
-         pred_tree_full_test, test_data$Label, pred_tree_full_train, train_data$Label)
+plot_roc(pred_log_full_test, test_data$Label, pred_log_full_train, train_data$Label, pred_tree_full_test, test_data$Label, pred_tree_full_train, train_data$Label)
 
 ```
+In the ROC plot for all features models, both the models perform better than the Null model. The decsion tree classifier's training and testing lines are closer to top left corner, in comparision to logistic regression classifier. Therefore, decsion tree classifier with full variables are better classifier. 
+
+We will do the same thing with 2 models with selected features.
 ```{r, fig.asp=1}
-# Generate predictions for both models on test and training datasets
-# For Logistic Regression Model
+#we generate predictions for both selected-features models on test and training datasets
+#logistic regression model (using response)
 pred_log_multi_test <- predict(log_multi_var_model, newdata = test_data, type = "response")
 pred_log_multi_train <- predict(log_multi_var_model, newdata = train_data, type = "response")
-
-# For Decision Tree Model (using probability predictions)
+#decision tree model (using probability)
 pred_tree_multi_test <- predict(decision_multi_var_model, newdata = test_data, type = "prob")[, 2]
 pred_tree_multi_train <- predict(decision_multi_var_model, newdata = train_data, type = "prob")[, 2]
 
-# Now call the plot function with the appropriate data
-plot_roc(pred_log_multi_test, test_data$Label, pred_log_multi_train, train_data$Label,
-         pred_tree_multi_test, test_data$Label, pred_tree_multi_train, train_data$Label)
+plot_roc(pred_log_multi_test, test_data$Label, pred_log_multi_train, train_data$Label, pred_tree_multi_test, test_data$Label, pred_tree_multi_train, train_data$Label)
 
 ```
+In the ROC plot for 15-selected features models, both models perform better than the Null model. The logistic regression classifier's training and testing lines are not a curve line, they are stepped. This could implies that the model is currently being overfitted or the dataset we are having is too small. Therefore, decsion tree classifier with 15-selected variables are better classifier. 
 
+# Clustering
+We will now working on clustering our data. For this one, the regions total death will be used. However, the column Income.group will not be included in this dataset, as it works as a label for the data. Therefore, the dataset will only include regions with total death records for each of the death cause.
 
-
-### Clustering
-We will now working on clustering our data. For this one, the total_countries_death data will be used. However, the column Income.group will not be included in this dataset, as it works as a label for the data. Therefore, the dataset will only include country with total death records for each of the death cause.
+First of all, we have to transform the data.
 
 ```{r}
 regions
