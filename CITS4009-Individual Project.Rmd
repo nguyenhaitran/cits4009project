@@ -767,6 +767,17 @@ ui <- navbarPage(
       )
     )
   ),
+# Tab 5: Clustering
+  tabPanel("Clustering",
+    sidebarLayout(
+      sidebarPanel(
+          selectInput("clustering_plot_type", "Select plot type:", choices = c("Dendogram", "Cluster Visualisation","WSS plot"))
+      ),
+      mainPanel(
+        plotOutput("clustering_plot", width = "100%", height = "400px"),
+      )
+),
+),
 )
 
 
@@ -894,6 +905,32 @@ server <- function(input, output){
       plot_roc(pred_log_test, test_data$Label, pred_log_train, train_data$Label, pred_tree_test, test_data$Label, pred_tree_train, train_data$Label)
     }
 })
+  #clustering
+  output$clustering_plot <- renderPlot({
+    clustering_plot_type <- input$clustering_plot_type
+    d<-dist(scale_data, method="euclidean")
+    scale_data<-scale(cluster_data[, 2:ncol(cluster_data)])
+    pfit<-hclust(d,method="ward.D2")
+    if (clustering_plot_type == "Dendogram") {
+      par(cex=0.5, mar=c(5, 5, 5, 5)) #we adjust the size of dendogram to be bigger and the labels be smaller
+      plot(pfit, labels = cluster_data$Entity, main="Cluster Dendogram for Death Causes") #we perform a hierarchial clustering
+      rect.hclust(pfit, k=3) #we will divide into 3 groups
+    } else if (clustering_plot_type == "Cluster Visualisation") {
+      groups <- cutree(pfit, k=3)
+      
+      princ <- prcomp(scale_data) #we calculate the principal components of scaled_df
+      nComp <- 2
+      project2D <- as.data.frame(predict(princ, newdata=scale_data)[,1:nComp]) #we put the scale data on the principal components dataframe
+      hclust.project2D <- cbind(project2D, cluster=as.factor(groups), country=cluster_data$Entity)
+      
+      hclust.hull <- find_convex_hull(hclust.project2D, groups)
+      
+      ggplot(hclust.project2D, aes(x=PC1, y=PC2)) + geom_point(aes(shape=cluster, color=cluster)) + geom_text(aes(label=country, color=cluster), hjust=0, vjust=1, size=3) + geom_polygon(data=hclust.hull, aes(group=cluster, fill=as.factor(cluster)),alpha=0.4, linetype=0) + theme(text=element_text(size=20))
+    } else{ #WSS plot
+      crit.df <- calculate_indices(scale_data, 10)
+      ggplot(crit.df, aes(x=k, y=WSS), color="blue") + geom_point() + geom_line(colour="blue") + scale_x_continuous(breaks=1:10, labels=1:10) +     theme(text=element_text(size=20))
+    }
+  })
 }
 
 # Run the Shiny app
