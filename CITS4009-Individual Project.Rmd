@@ -756,6 +756,17 @@ ui <- navbarPage(
       )
     )
   ),
+# Tab 4: Plot ROC
+  tabPanel("Plots to compare AUC",
+    sidebarLayout(
+      sidebarPanel(
+        radioButtons("variable_set", "Select variable set:", choices = c("all_features", "selected_features"))
+      ),
+      mainPanel(
+        plotOutput("ROC_plot", width = "100%", height = "400px"),
+      )
+    )
+  ),
 )
 
 
@@ -841,6 +852,7 @@ server <- function(input, output){
     table<-pretty_perf_table(decision_model, train_data, test_data, all_features, "decision_tree")
     table
 })
+  # 
   output$logistic_perf_table <- renderTable({
   # Get predictions from the logistic regression model
     variable_set <- input$logistic_variable_set
@@ -853,6 +865,34 @@ server <- function(input, output){
     }
     table<-pretty_perf_table(logistic_model, train_data, test_data, all_features, "logistic")
     table
+})
+  #ROC plot
+  output$ROC_plot <- renderPlot({
+  # Get predictions from the logistic regression model
+    variable_set <- input$variable_set
+    if (variable_set == "all_features") {
+      formula<-paste("Label", paste(all_features, collapse=" + "), sep=" ~ ")
+      logistic_model<-glm(formula=formula, data=train_data, family=binomial(link="logit"))
+      pred_log_test <- predict(logistic_model, newdata = test_data, type = "response")
+      pred_log_train <- predict(logistic_model, newdata = train_data, type = "response")
+      #decision tree model (using probability)
+      decision_model <- rpart(Label ~ ., data = train_data[, c(all_features, "Label")], method = "class",control = rpart.control(cp = 0.01))
+      pred_tree_test <- predict(decision_model, newdata = test_data, type = "prob")[, 2]
+      pred_tree_train <- predict(decision_model, newdata = train_data, type = "prob")[, 2]
+      
+      plot_roc(pred_log_test, test_data$Label, pred_log_train, train_data$Label, pred_tree_test, test_data$Label, pred_tree_train, train_data$Label)
+    } else {
+      formula<-paste("Label", paste(selected_features, collapse=" + "), sep=" ~ ")
+      logistic_model<-glm(formula=formula, data=train_data, family=binomial(link="logit"))
+      pred_log_test <- predict(logistic_model, newdata = test_data, type = "response")
+      pred_log_train <- predict(logistic_model, newdata = train_data, type = "response")
+      #decision tree model (using probability)
+      decision_model <- rpart(Label ~ ., data = train_data[, c(selected_features, "Label")], method = "class",control = rpart.control(cp = 0.01))
+      pred_tree_test <- predict(decision_model, newdata = test_data, type = "prob")[, 2]
+      pred_tree_train <- predict(decision_model, newdata = train_data, type = "prob")[, 2]
+      
+      plot_roc(pred_log_test, test_data$Label, pred_log_train, train_data$Label, pred_tree_test, test_data$Label, pred_tree_train, train_data$Label)
+    }
 })
 }
 
