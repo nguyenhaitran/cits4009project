@@ -340,7 +340,8 @@ for (var in all_features){
 }
 ```
 ```{r}
-one_num_var
+selected_features<-one_num_var
+selected_features
 ```
 Among all the vairables satisfied with the condition of log likelihood larger than 10, there are 15 features are good to classify the countries from high-income group based on death causes. They are:
 - Outdoor.air.pollution   
@@ -368,7 +369,7 @@ performanceMeasures <- function(pred, truth, name = "model") {
   ctable <- table(factor(truth, levels = c(0, 1)), factor(pred > 0.5, levels = c(FALSE, TRUE)))
   accuracy <- sum(diag(ctable)) / sum(ctable) #(TP+TN)/(TP+FP+TN+FN)
   precision <- ifelse(sum(ctable[, 2]) == 0, 0, ctable[2, 2] / sum(ctable[, 2])) #we prevent the division with 0, (TP)/(TP+FP)
-  recall <- ifelse(sum(ctable[2, ]) == 0, 0, ctable[2, 2] / sum(ctable[2, ]) #we prevent the division with 0, (TP)/(TP+FN)
+  recall <- ifelse(sum(ctable[2, ]) == 0, 0, ctable[2, 2] / sum(ctable[2, ])) #we prevent the division with 0, (TP)/(TP+FN)
   f1 <- ifelse(precision + recall == 0, 0, 2 * precision * recall / (precision + recall)) #we prevent the division with 0, (2*precision*recall)/(precision+recall)
   data.frame(model = name, precision = precision, recall = recall, f1 = f1, accuracy = accuracy)
 }
@@ -434,7 +435,7 @@ The model also so really good results for percision, recall, f1 and accurarcy
 ### Selected variables
 As mentioned, there are 15 good classifier that we can use to classify the countries in high or non-high income groups. Therefore, we will use them to make the decision tree model.
 ```{r}
-decision_multi_var_model <- rpart(Label ~ ., data = train_data[, c(one_num_var, "Label")], method = "class")
+decision_multi_var_model <- rpart(Label ~ ., data = train_data[, c(selected_features, "Label")], method = "class")
 rpart.plot(decision_multi_var_model)
 ```
 
@@ -570,13 +571,11 @@ cluster_data<-total_regions_death
 ```{r}
 cluster_data
 ```
-
+We need to scale the data, with mean of 0 and standard deviation of 1 
 
 ```{r}
-#all_variables<-colnames(label_total_countries_death)[-1] #except the country column
 scale_data<-scale(cluster_data[, 2:ncol(cluster_data)]) # this will be the data where each column has 0 mean and unit standard deviation
 ```
-
 
 ```{r}
 attr(scale_data, "scaled:scale")
@@ -585,48 +584,46 @@ attr(scale_data, "scaled:scale")
 ```{r}
 attr(scale_data, "scaled:center")
 ```
-
+We will calculate the distance using euclidean distance, to form the vectors (or lines) of seperation between groups. 
 ```{r}
 d<-dist(scale_data, method="euclidean")
 d
 ```
 ```{r}
 pfit<-hclust(d,method="ward.D2")
-plot(pfit, labels = cluster_data$Entity, main="Cluster Dendogram for Death Causes")
-rect.hclust(pfit, k=3)
+par(cex=0.5, mar=c(5, 5, 5, 5)) #we adjust the size of dendogram to be bigger and the labels be smaller
+plot(pfit, labels = cluster_data$Entity, main="Cluster Dendogram for Death Causes") #we perform a hierarchial clustering
+rect.hclust(pfit, k=3) #we will divide into 3 groups
 ```
 ```{r}
 plot(as.dendrogram(pfit), xlim=c(1, 25))
 ```
 
-
+This is the cutree function, which returns a vector of clustering group assigned to each row.
 ```{r}
 groups <- cutree(pfit, k=3)
 groups
 ```
 
-```{r}
-print(dim(project2D))  # Dimensions of project2D
-print(length(groups))  # Length of groups (should be the same as number of rows in project2D)
-print(length(cluster_data$Entity))  # Length of cluster_data$Country
-```
-
+Now we will visualise the clusters. To do that, we will perform principle components - dimension reduction, to visualise the cluster groups on 2 principal components (or 2D graph).
 
 ```{r}
-princ <- prcomp(scale_data) # Calculate the principal components of scaled_df
+princ <- prcomp(scale_data) #we calculate the principal components of scaled_df
 nComp <- 2
-project2D <- as.data.frame(predict(princ, newdata=scale_data)[,1:nComp])
+project2D <- as.data.frame(predict(princ, newdata=scale_data)[,1:nComp]) #we put the scale data on the principal components dataframe
 hclust.project2D <- cbind(project2D, cluster=as.factor(groups), country=cluster_data$Entity)
 head(hclust.project2D)
 ```
 
 ```{r}
-# finding convex hull
+#this is the code from the lecture, with modification
+#finding convex hull
 library('grDevices')
+#this function will return the vector of points in each convex hull
 find_convex_hull <- function(proj2Ddf, groups) {
   do.call(rbind,lapply(unique(groups), FUN = function(c) {
     f <- subset(proj2Ddf, cluster==c);
-    f[chull(f),]
+    f[chull(f),] # this compute the convex hull of a set of points
     }))
   }
 hclust.hull <- find_convex_hull(hclust.project2D, groups)
@@ -634,27 +631,27 @@ hclust.hull <- find_convex_hull(hclust.project2D, groups)
 
 
 ```{r}
-ggplot(hclust.project2D, aes(x=PC1, y=PC2)) +
-geom_point(aes(shape=cluster, color=cluster)) +
-geom_text(aes(label=country, color=cluster), hjust=0, vjust=1, size=3) +
-geom_polygon(data=hclust.hull, aes(group=cluster, fill=as.factor(cluster)),
-alpha=0.4, linetype=0) + theme(text=element_text(size=20))
+#this is the code from lecture
+ggplot(hclust.project2D, aes(x=PC1, y=PC2)) + geom_point(aes(shape=cluster, color=cluster)) + geom_text(aes(label=country, color=cluster), hjust=0, vjust=1, size=3) + geom_polygon(data=hclust.hull, aes(group=cluster, fill=as.factor(cluster)),alpha=0.4, linetype=0) + theme(text=element_text(size=20))
 ```
+We can see that the data are divided into 3 groups, similar to the dendogram that we have above. 
+
+We do not know which is the optimal number of k to divide the data into k groups. Therefore, we will find the number of cluster k.
+
+There are 2 ways to find optimal k, either by looking for elbow curve when we calculate all k within sum of squares(WSS) or by calculating the Calinski-Harabasz index. In this paper work, the method of calculating WSS will be applied.
+
 ```{r}
-# Function to return the squared Euclidean distance of two given points x and y
+#these are the code followed from the lecture, with some modificationl.
+#this function will return the squared Euclidean distance of two given points x and y from the cluster centroid
 sqr_euDist <- function(x, y) {
-  sum((x - y)**2)
+  sum((x - y)^2)
 }
-# Function to calculate WSS of a cluster, represented as a n-by-d matrix
-# (where n and d are the numbers of rows and columns of the matrix)
-# which contains only points of the cluster.
+#this function calculates WSS of a cluster, represented as a n-by-d matrix (n is number of rows and d is the number of column) which contains only points of the cluster.
 wss <- function(clustermat) {
   c0 <- colMeans(clustermat)
   sum(apply( clustermat, 1, FUN=function(row) {sqr_euDist(row, c0)} ))
 }
-# Function to calculate the total WSS. Argument `scaled_df`: data frame
-# with normalised numerical columns. Argument `labels`: vector containing
-# the cluster ID (starting at 1) for each row of the data frame.
+#this function will calculate the total WSS.
 wss_total <- function(scaled_df, labels) {
   wss.sum <- 0
   k <- length(unique(labels))
@@ -662,42 +659,26 @@ wss_total <- function(scaled_df, labels) {
     wss.sum <- wss.sum + wss(subset(scaled_df, labels == i))
     wss.sum
 }
-# Function to calculate total sum of squared (TSS) distance of data
-# points about the (global) mean. This is the same as WSS when the
-# number of clusters (k) is 1.
+#this function will calculate the total sum of squared (TSS) distance of data points about the mean. This is the same as WSS when the k equals to 1.
 tss <- function(scaled_df) {
   wss(scaled_df)
 }
 ```
 
 ```{r}
-# Function to return the CH indices computed using hierarchical
-# clustering (function `hclust`) or k-means clustering (`kmeans`)
-# for a vector of k values ranging from 1 to kmax.
-CH_index <- function(scaled_df, kmax, method="kmeans") {
-  if (!(method %in% c("kmeans", "hclust")))
-    stop("method must be one of c('kmeans', 'hclust')")
-  
+#this is the code followed from the lecture, with modification
+#this function will return the  indices computed using k-means clustering (`kmeans`) for a vector of k values ranging from 1 to kmax.
+calculate_indices <- function(scaled_df, kmax) {
   npts <- nrow(scaled_df)
   wss.value <- numeric(kmax) # create a vector of numeric type
   # wss.value[1] stores the WSS value for k=1 (when all the
   # data points form 1 large cluster).
   wss.value[1] <- wss(scaled_df)
-  
-  if (method == "kmeans") {
-    # kmeans
-    for (k in 2:kmax) {
-      clustering <- kmeans(scaled_df, k, nstart=10, iter.max=100)
-      wss.value[k] <- clustering$tot.withinss
-    }
-  } else {
-    # hclust
-    d <- dist(scaled_df, method="euclidean")
-    pfit <- hclust(d, method="ward.D2")
-    for (k in 2:kmax) {
-      labels <- cutree(pfit, k=k)
-      wss.value[k] <- wss_total(scaled_df, labels)
-    }
+  d <- dist(scaled_df, method="euclidean")
+  pfit <- hclust(d, method="ward.D2")
+  for (k in 2:kmax) {
+    labels <- cutree(pfit, k=k)
+    wss.value[k] <- wss_total(scaled_df, labels)
   }
   bss.value <- tss(scaled_df) - wss.value # this is a vector
   B <- bss.value / (0:(kmax-1)) # also a vector
@@ -709,33 +690,25 @@ CH_index <- function(scaled_df, kmax, method="kmeans") {
 ```{r}
 library(gridExtra)
 # calculate the CH criterion
-crit.df <- CH_index(scale_data, 10, method="hclust")
-fig1 <- ggplot(crit.df, aes(x=k, y=CH_index)) +
-geom_point() + geom_line(colour="red") +
-scale_x_continuous(breaks=1:10, labels=1:10) +
-labs(y="CH index") + theme(text=element_text(size=20))
-fig2 <- ggplot(crit.df, aes(x=k, y=WSS), color="blue") +
-geom_point() + geom_line(colour="blue") +
-scale_x_continuous(breaks=1:10, labels=1:10) +
-theme(text=element_text(size=20))
+crit.df <- calculate_indices(scale_data, 10)
+ggplot(crit.df, aes(x=k, y=WSS), color="blue") + geom_point() + geom_line(colour="blue") + scale_x_continuous(breaks=1:10, labels=1:10) + theme(text=element_text(size=20))
 ```
-
-```{r}
-grid.arrange(fig1, fig2, nrow=1)
-```
-NOTE: For the Shiny App, put all the ROC plots into it. Need to add all the plots and tables into the shiny app
-
+When we look for the first 10 k values and the values for WSS, k equals to 2 is the best numbers of clusters.
 
 ## Shiny App
 For data exploratory, it will be done using Shiny app
+This will be removed
 
 ```{r}
+logistic_model <- NULL
+decision_model <- NULL
 # Define UI for application that draws different plot
-ui <- fluidPage(
+ui <- navbarPage(
     titlePanel("Visualisation of death in country/region during 1990 - 2019"),
-    selectInput("plot_type", "Select plot type:", choices = c("Line plot", "Boxplot", "Heat map", "Correlation plot")),
+    tabPanel("EDA",
     sidebarLayout(
         sidebarPanel(
+          selectInput("plot_type", "Select plot type:", choices = c("Line plot", "Boxplot", "Heat map", "Correlation plot")),
             conditionalPanel(
               condition = "input.plot_type == 'Line plot'",
               checkboxInput("compare", "Compare between 2 countries/regions", FALSE),
@@ -757,6 +730,19 @@ ui <- fluidPage(
                 plotOutput("plot2", width = "100%", height = "600px"))
         )
     )
+),
+# Tab 2: Decision Tree Classification Model
+  tabPanel("Decision Tree Classification Model",
+    sidebarLayout(
+      sidebarPanel(
+        radioButtons("tree_variable_set", "Select variable set:", choices = c("all_features", "selected_features"))
+      ),
+      mainPanel(
+        plotOutput("decision_tree", width = "100%", height = "400px"),
+        tableOutput("decision_tree_perf_table")
+      )
+    )
+  ),
 )
 
 
@@ -821,11 +807,24 @@ server <- function(input, output){
       ggplot(region_data, aes_string(x="Year", y=input$reason, group ="Entity")) + geom_line(color="darkolivegreen") + labs(x="Year", y = input$reason)
     }
   })
+  # Decision Tree classification model
+  output$decision_tree <- renderPlot({
+    variable_set <- input$tree_variable_set
+    if (variable_set == "all_features") {
+      decision_model <- rpart(Label ~ ., data = train_data[, c(all_features, "Label")], method = "class",control = rpart.control(cp = 0.01))
+    } else {
+      decision_model <- rpart(Label ~ ., data = train_data[, c(selected_features, "Label")], method = "class")
+    }
+    rpart.plot(decision_model)
+  })
 }
 
 # Run the Shiny app
 shinyApp(ui = ui, server = server)
 ```
+
+
+
 
 
 
