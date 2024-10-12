@@ -641,7 +641,7 @@ We do not know which is the optimal number of k to divide the data into k groups
 There are 2 ways to find optimal k, either by looking for elbow curve when we calculate all k within sum of squares(WSS) or by calculating the Calinski-Harabasz index. In this paper work, the method of calculating WSS will be applied.
 
 ```{r}
-#these are the code followed from the lecture, with some modificationl.
+#these are the code followed from the lecture, with some modification.
 #this function will return the squared Euclidean distance of two given points x and y from the cluster centroid
 sqr_euDist <- function(x, y) {
   sum((x - y)^2)
