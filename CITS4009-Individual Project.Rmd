@@ -478,7 +478,7 @@ When we do the confusion matrix for the testing dataset, the model predict corre
 ### Selected feature
 We will build the logistic regression classification model, with 15 selected features
 ```{r}
-formula<-paste("Label", paste(one_num_var, collapse=" + "), sep=" ~ ")
+formula<-paste("Label", paste(selected_features, collapse=" + "), sep=" ~ ")
 log_multi_var_model<-glm(formula=formula, data=train_data, family=binomial(link="logit"))
 train_data$log_multi_var_pred <- predict(log_multi_var_model, newdata=train_data, type="response")
 test_data$log_multi_var_pred <- predict(log_multi_var_model, newdata=test_data, type="response")
@@ -748,11 +748,10 @@ ui <- navbarPage(
   tabPanel("Logistic Regression Classification Model",
     sidebarLayout(
       sidebarPanel(
-        radioButtons("tree_variable_set", "Select variable set:", choices = c("all_features", "selected_features"))
+        radioButtons("logistic_variable_set", "Select variable set:", choices = c("all_features", "selected_features"))
       ),
       mainPanel(
-        plotOutput("decision_tree", width = "100%", height = "400px"),
-        tableOutput("decision_tree_perf_table")
+        tableOutput("logistic_perf_table")
         
       )
     )
@@ -840,6 +839,19 @@ server <- function(input, output){
       decision_model <- rpart(Label ~ ., data = train_data[, c(selected_features, "Label")], method = "class")
     }
     table<-pretty_perf_table(decision_model, train_data, test_data, all_features, "decision_tree")
+    table
+})
+  output$logistic_perf_table <- renderTable({
+  # Get predictions from the logistic regression model
+    variable_set <- input$logistic_variable_set
+    if (variable_set == "all_features") {
+      formula<-paste("Label", paste(all_features, collapse=" + "), sep=" ~ ")
+      logistic_model<-glm(formula=formula, data=train_data, family=binomial(link="logit"))
+    } else {
+      formula<-paste("Label", paste(selected_features, collapse=" + "), sep=" ~ ")
+      logistic_model <- glm(formula=formula, data=train_data, family=binomial(link="logit"))
+    }
+    table<-pretty_perf_table(logistic_model, train_data, test_data, all_features, "logistic")
     table
 })
 }
