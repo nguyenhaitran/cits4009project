@@ -1,7 +1,7 @@
 ---
 title: "CITS4009-Individual Project"
-author: "Henry Tran"
-date: "2024-10-04"
+author: "Henry TRAN - 23035141"
+date: "2024-10-12"
 output: html_document
 ---
 
@@ -18,7 +18,9 @@ library(reshape2)
 library(readxl)
 library(dplyr)
 ```
+In the world every year, there are different numbers of death recorded because of various reasons. Depends on the countries and regions, the numbers of death in each death reasons could be unique. For example, there are higher numbers of death recorded in high-income countries due to smoking, compared to low-income countries with higher numbers of death because of starving. In this report, the Country and Death causes dataset from World Health Organisation recorded from 1990 to 2019 is used for data exploration and modelling to investigate the death causes in different countries and how they will be utilised for making binary classifiers, clustering.
 
+We need to load the data for this task
 ```{r}
 # Read the data
 path<-url("https://lms.uwa.edu.au/bbcswebdav/pid-3998436-dt-content-rid-47695412_1/courses/CITS4009_SEM-2_2024/Countries%20and%20death%20causes.csv")
@@ -29,6 +31,7 @@ path<-url("https://lms.uwa.edu.au/bbcswebdav/pid-3998436-dt-content-rid-47695412
 data<-read.csv(path, header=TRUE)
 head(data)
 nrow(data)
+ncol(data)
 ```
 The data has 31 columns and 6840 rows. For the column names, they can be seen that the column names have dot-separated between each word.
 
@@ -38,9 +41,10 @@ str(data)
 ```{r}
 summary(data)
 ```
-For the first 2 columns, "Entity" and "Code" store different country names and codes. Therefore, to set them as a country as a unique value, it would be the best to convert them into factor
+When exploring the data type of the dataset, Entity and Code are in character, while other columns are in numerical. As Entity and Code are unique for each country, then it should be changed to factor. Among the numerical data, Year should be changed to factor as well, since Year will not be used for any calculation.
 
 ```{r}
+#converting Entity, Code and Year to factor
 data$Entity<-as.factor(data$Entity)
 data$Code<-as.factor(data$Code)
 data$Year<-as.factor(data$Year)
@@ -48,38 +52,32 @@ data$Year<-as.factor(data$Year)
 summary(data)
 str(data)
 ```
-
+It could be seen that the each Entity and Code appeared 30 times in the dataset, which is matched with the number of years we have from 1990 to 2019. Among the numerical data, it could be seen that the gap between values are really large
 ```{r}
 unique(data$Entity)
 ```
-
-
 There are 228 unique entities but there are only 206 codes in this dataset. The reason is because there are some countries and regions do not have unique codes.
 
 There are also no missing data
 
 ```{r}
+#checking missing value
 total_missing_value = sum(is.na(data))
 total_missing_value
 ```
 
-While with remaining 29 columns, the maximum numbers are extremely larger than other values. The reason is because the dataset did not only record deaths of countries, but it also recorded the total deaths in groups, regions and in the world. Therefore, if we do the data analysis on the whole dataset, it will create skewness problem. The solution for this would be we can seperated data into different groups: countries, regions and world. I have some examples of the single eda below:
+As I mentioned above, the gap between numbers of recorded death are extremely large within 28 death causes. The reason is because the dataset did not only record deaths of countries, but it also recorded the total deaths in groups, regions and in the world. Therefore, if we do the data analysis on the whole dataset, it will create skewness problem. The solution for this would be we can seperated data into different groups: countries and regions. When we do the boxplot of one death cause, it will be really skewed and we could not analyse anything from it
 
 ```{r}
+#taking High.systolic.blood.pressure to illustrate the skewness
 boxplot(data$High.systolic.blood.pressure)
 ```
-```{r}
-eg1<-log1p(data$Outdoor.air.pollution)
-boxplot(eg1)
-```
-
-The data needs to be transformed, including divided the data into different groups, including countries, regions. Additionally, log-transformation will be applied for data transformation
 
 ## Data Transformation
 
-Firstly, the data will be divided into 2 groups: country and region
+Firstly, the data will be divided into 2 groups: countries and regions
 
-There are 28 countries and regions in this data. There are few information we can know if the Entity is a region, including:
+There are 228 countries and regions in this data. There are few information we can know if the Entity is a region or world, including the Entity:
 - Ends with (WB) or (WHO)
 - Start with "World"
 - G20
@@ -87,6 +85,7 @@ And anything other than this will be considered to be countries.
 Here is how we will divide the data into groups
 
 ```{r}
+#create a mask to filter out the regions and the regions
 region_mask <- grepl("(WB)|(WHO)|^World|^G20|^OECD", data$Entity)
 
 regions<-data[region_mask,]
@@ -94,58 +93,59 @@ countries<-data[!region_mask,]
 ```
 
 ```{r}
-countries
+head(countries)
+dim(countries)
 ```
+With countries dataset, there are 6240 rows and 31 columns, including 28 death causes
 
 ```{r}
-regions
+head(regions)
+dim(regions)
 ```
+While with regions dataset, there are 600 rows and 31 columns, also including 28 death causes
 
-#Model: Binary classification Sub-Saharan African countries based on death causes
+As the dataset is divided into 2 groups, then we will use both of them for the next steps of classification modelling and clustering.
+
+#Model: Binary classification of High-income countries based on death causes
 ## Data Transformation
-For the classification model, the model will classify the Sub-Saharan African countries based on the death causes. The reason to build this model is because the Sub-Saharan African countries could have different death causes compared to countries from other regions.
+For the classification model, the model will classify the high-income countries based on the death causes. The reason to build this model is because the numbers of death in high-income countries could because of different causes compared to countries from other income-groups. For each death causes of each country, the total numbers of death will be calculated and then be used for classification and clustering.
 
-According to World Bank, there are 48 countries in the low-income groups. Therefore, we will have a column to label them, the country in Sub-Saharan African region will be 1 and 0 for countries from other regions. 
+According to World Bank, there are 86 countries in the high-income group. Therefore, we will have a column to label them, the country in high-income group will be 1 and 0 for countries from other income groups. 
 
 There is a data file of countries in regions from World Bank. This file will be merge with the current data that we are processing
 
 ```{r}
-#Here is my file path, please change to your filepath to where you downloaded the file
+#here is my file path, please change to your filepath to where you downloaded the file to run the code below
 path<-"/Users/henrytran/Documents/UWA_Master-Data-Science/CITS4009/Project/"
 ```
 
 ```{r}
+#create a path that can access and extractn the data
 country_groups_file<- paste0(path, "World Bank Country Groups.xlsx")
-country_groups_df<-read_excel(country_groups_file, sheet = "List of economies")
-country_groups_df
+country_groups_dataset<-read_excel(country_groups_file, sheet = "List of economies")
+country_groups_dataset
 ```
-The data that we need will include the the Economy, Code and Income group. Therefore, we will keep only 3 columns
+The data that we need will include the the Economy, Code and Income group. Therefore, we will keep only 3 columns for this dataset
 
 ```{r}
-country_groups_df<-country_groups_df[,c(1,2,4)] #We need the first 3 columns - Economy, Code, Region
-country_groups_df
+country_groups_dataset<-country_groups_dataset[,c(1,2,4)] #We need the first 3 columns - Economy, Code, Region
+country_groups_dataset
 ```
 Now, we will merge countries dataset with country groups dataset using Code as key, and we keep all the data on the countries dataset
 ```{r}
-countries_merged<-merge(countries, country_groups_df, by.x="Code", by.y="Code", all.x=TRUE)
-countries_merged
+countries_merged<-merge(countries, country_groups_dataset, by.x="Code", by.y="Code", all.x=TRUE)
+head(countries_merged) 
 ```
-As there are 4 countries do not have Code, including Northen Ireland, Wales, Scotland, and England. They are all in United Kingdom (UK). Now we will double check to see if the total death of UK is the same to the total death of 4 countries
+As I look through both the dataset, there are 4 countries do not have Code, including Northen Ireland, Wales, Scotland, and England. They are all in United Kingdom (UK). Now we will double check to see if the total death of UK is the same to the total death of 4 countries
 ```{r}
-countries_merged[countries_merged$Entity=="United Kingdom",]
-```
-
-
-```{r}
+#calculate the total death of UK over 30 years for all death causes
 total_uk_death <- colSums(countries_merged[countries_merged$Entity=="United Kingdom", 4:31], na.rm = TRUE)
 total_uk_death
 ```
 
 ```{r}
+#calculate the total death of England, Northern Ireland, Wales, Scotland over 30 years for all death causes
 four_countries_death <- subset(countries_merged, Entity %in% c("England", "Northern Ireland", "Wales", "Scotland"))
-four_countries_death
-```
-```{r}
 total_four_countries_death <- colSums(four_countries_death[, 4:31], na.rm = TRUE)
 total_four_countries_death
 ```
@@ -153,31 +153,33 @@ After calculating the total deaths of 4 countries over years, the numbers of dea
 
 Now we will calculate the total death of each country for all death causes.
 ```{r}
-countries_merged<-merge(countries, country_groups_df, by.x="Code", by.y="Code")
+#we keep the remaining countries
+countries_merged<-merge(countries, country_groups_dataset, by.x="Code", by.y="Code")
 countries_merged<-countries_merged[,-32]
 countries_merged
 ```
 ```{r}
-# For the data, group the data into entity and income groups, then calculate the total death of each death causes of each country
+#for the data, group the data into entity and income groups, then calculate the total death of each death causes of each country
 names(countries_merged)[names(countries_merged) == "Income group"] <- "Income.group"
+#using binning technique to calculate the sum of all death causes
 total_countries_death <- countries_merged %>% group_by(Entity, Income.group) %>% summarise(across(c("Outdoor.air.pollution": "Iron.deficiency"), sum))
 total_countries_death
 ```
 
-After aggregating the model, now we will create a label for each country. As mentioned previously, the countries in  region will be 1 and 0 for countries from other regions. 
+After aggregating the model, now we will create a label for each country, in a column called 'Label'. As mentioned previously, the countries with high income will be 1 and 0 for countries in other income groups. Label will be the last column in this dataset
 
 ```{r}
 label_total_countries_death<-total_countries_death
 label_total_countries_death$Label<-ifelse(total_countries_death$Income.group == "High income", 1, 0)
 label_total_countries_death$Label<-as.factor(label_total_countries_death$Label)
-label_total_countries_death
+head(label_total_countries_death)
 ```
 ```{r}
 #check if there is any NA values in the data
 sum(is.na(label_total_countries_death))
 label_total_countries_death[!complete.cases(label_total_countries_death),]
 ```
-There is one country - Venezuela, which was not classified with income group. As the dataset has 201 rows and only one row has NA values, it is a good decision for us to remove this value
+There is one country - Venezuela, which was not classified with income group. This is because it was not specified in the country_groups_dataset from World Bank. As the dataset has 201 rows and only one row has NA values, it is a good decision for us to remove this country
 ```{r}
 label_total_countries_death <- na.omit(label_total_countries_death)
 ```
@@ -185,25 +187,20 @@ label_total_countries_death <- na.omit(label_total_countries_death)
 ```{r}
 label_total_countries_death
 ```
+There are 200 countries, and 86 of the countries are in high-income group. Therefore, the ratio between number of countries in high and non-high incomes groups are close to equal.
 
-
-
-#Building model
-- Explain what a null model would look like for classification
-- Find all categorical variables and numerical variables
-- Expand the dataset with columns built from single variable models
-- Plot AUC and select the best performing variables according to AUC
-
-There are 2 models selected for Sub-Saharan African countries classification based on death causes. They are Decision Trees classifier, and Logistic Regression classifier
+##Building model
+There are 2 models selected for high-income countries classification based on death causes. They are Decision Trees classifier, and Logistic Regression classifier
 
 First of all, the data needs to be divided into 2 groups: training and testing.
 ```{r}
+#we want to make the sampling be the same when we re-run it 
 set.seed(12345)
-random_mask<-runif(nrow(label_total_countries_death))<0.8 # 80% of data used for training
+random_mask<-runif(nrow(label_total_countries_death))<0.8 #80% of data will be used for training, 20% of data will be used for testing
 train_data<-label_total_countries_death[random_mask,]
 test_data<-label_total_countries_death[!random_mask,]
 ```
-
+We only take the Label columns with 28 death causes. There are 152 rows and 29 columns for training dataset, and 48 rows and 29 columns for testing dataset
 ```{r}
 train_data<-train_data[,3:ncol(train_data)]
 train_data
@@ -215,14 +212,14 @@ test_data
 cat("Testing dataset size is", dim(test_data))
 ```
 ```{r}
-# we separated the columns, including the responses and all features
-responses<- colnames(label_total_countries_death) %in% c("Entity", "Income.group", "Label")
+#we separated the columns, including the responses and all features
+responses<- colnames(label_total_countries_death) %in% c("Entity", "Income.group", "Label") # create a mask to filter out the responses and the features 
 all_features<-colnames(label_total_countries_death)[!responses]
 all_features
 ```
 
-## Best single variable and feature selections
-### Null model
+### Best single variable and feature selections
+#### Null model
 In the training dataset, the probability of high-income countries in the dataset is 
 ```{r}
 null_model_prob<-sum(train_data$Label==1)/nrow(train_data)
